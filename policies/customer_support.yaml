@@ -1,0 +1,44 @@
+name: customer_support_policy
+version: 1
+description: Rules for customer support agents.
+
+rules:
+  - name: allow_order_read
+    effect: allow
+    agent: support-bot
+    action: read
+    resource: order
+
+  - name: allow_customer_read
+    effect: allow
+    agent: support-bot
+    action: read
+    resource: customer
+
+  - name: deny_customer_delete
+    effect: deny
+    agent: support-bot
+    action: delete
+    resource: customer
+    priority: 100
+
+  - name: deny_external_email_with_restricted
+    effect: deny
+    action: send
+    resource: email
+    conditions:
+      data_classification: restricted
+      destination: external
+    priority: 200
+
+  - name: escalate_bulk_customer_read
+    effect: escalate
+    action: read
+    resource: customer
+    conditions:
+      min_volume: 50
+    priority: 50
+
+  - name: default_deny_unknown
+    effect: escalate
+    priority: 1

@@ -1,0 +1,39 @@
+
+---
+
+### 2. `.gitignore` (project root) — what never gets committed
+
+```gitignore
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Docker volumes
+postgres_data/
+redis_data/
+
+# Logs and local state
+*.log
+.run-logs/
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
