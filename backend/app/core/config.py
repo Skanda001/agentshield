@@ -45,6 +45,9 @@ class Settings(BaseSettings):
         default="replace-with-a-different-32-char-random-secret"
     )
 
+        # Kill switch
+    KILL_SWITCH_ENABLED: bool = True
+
         # HITL
     SLACK_WEBHOOK_URL: str = ""
     APPROVAL_BASE_URL: str = "http://localhost:8001"

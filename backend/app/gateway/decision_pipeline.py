@@ -1,13 +1,17 @@
+"""Decision pipeline. Orchestrates the security decision for one tool call.
 
+Chunk 10: check kill switches BEFORE policy evaluation.
+If any switch is active, BLOCK immediately with the switch reason.
+"""
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import chain as audit_chain
-from app.core.config import settings
 from app.db.models.agent import Agent
 from app.db.models.decision import Decision
 from app.gateway.tool_adapter import NormalizedCall, ToolCall, normalize
+from app.kill_switch import controller as kill_switch_controller
 from app.risk_engine.deterministic import RiskResult, evaluate
 from app.risk_engine.signals import extract_signals
 from app.schemas.decision import DecideResponse, Signal
@@ -35,7 +39,37 @@ async def run(
         resource_type_explicit=normalized.resource_type,
     )
 
-    # ── 1. Policy evaluation ────────────────────────────────────
+    # ── 0. Kill switch check (highest precedence) ─────────────
+    ks = await kill_switch_controller.check(
+        db,
+        agent_id=agent.id,
+        tenant_id=agent.tenant_id,
+        tool=normalized.tool,
+    )
+    if ks.blocked:
+        decision = Decision(
+            agent_id=agent.id,
+            tenant_id=agent.tenant_id,
+            tool=normalized.tool,
+            action=sig.action,
+            resource_type=sig.resource_type,
+            arguments=normalized.arguments,
+            verdict="BLOCK",
+            risk_score=0.0,
+            reasons=[ks.reason or "Blocked by kill switch"],
+            signals=[],
+            injection_score=sig.injection_score,
+            pii_classification=sig.pii_classification,
+            pii_labels=sig.pii_labels,
+            note=f"kill_switch_scope={ks.scope}",
+        )
+        db.add(decision)
+        await db.commit()
+        await db.refresh(decision)
+        await _audit(decision, agent)
+        return PipelineResult(decision=decision, response=_to_response(decision))
+
+    # ── 1. Policy evaluation ─────────────────────────────────
     policy = await policy_service.find_active_policy_for_tenant(db, agent.tenant_id)
 
     policy_id = None
@@ -59,7 +93,7 @@ async def run(
             policy_effect = eval_result.effect
             policy_reason = eval_result.reason
 
-    # ── 2. Short-circuit: policy deny ──────────────────────────
+    # ── 2. Short-circuit: policy deny ────────────────────────
     if policy_effect == "deny":
         decision = Decision(
             agent_id=agent.id,
@@ -85,14 +119,14 @@ async def run(
         await _audit(decision, agent)
         return PipelineResult(decision=decision, response=_to_response(decision))
 
-    # ── 3. Risk engine ─────────────────────────────────────────
+    # ── 3. Risk engine ───────────────────────────────────────
     risk: RiskResult = evaluate(
         tool=normalized.tool,
         arguments=normalized.arguments,
         resource_type=normalized.resource_type,
     )
 
-    # ── 4. Combine policy + risk ───────────────────────────────
+    # ── 4. Combine policy + risk ─────────────────────────────
     if policy_effect == "escalate" and risk.verdict == "ALLOW":
         final_verdict = "ESCALATE"
         final_reasons = list(risk.reasons) + [f"Policy escalated: {policy_reason}"]
@@ -129,7 +163,7 @@ async def run(
 
     await _audit(decision, agent)
 
-    # ── 5. Create approval for ESCALATE ────────────────────────
+    # ── 5. Create approval for ESCALATE ──────────────────────
     if final_verdict == "ESCALATE":
         await _create_approval_if_escalated(decision, agent)
 
@@ -157,6 +191,7 @@ async def _audit(decision: Decision, agent: Agent) -> None:
                 "pii_classification": decision.pii_classification,
                 "pii_labels": decision.pii_labels,
                 "agent_name": agent.name,
+                "note": decision.note,
             },
             agent_id=agent.id,
             tenant_id=agent.tenant_id,
@@ -175,6 +210,7 @@ async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> Non
         except approval_service.ApprovalServiceError:
             return
 
+        from app.core.config import settings
         base = getattr(settings, "APPROVAL_BASE_URL", "http://localhost:8001")
         ok, err = await send_approval_request(
             approval_id=str(approval.id),
