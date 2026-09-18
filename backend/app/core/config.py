@@ -45,6 +45,11 @@ class Settings(BaseSettings):
         default="replace-with-a-different-32-char-random-secret"
     )
 
+        # HITL
+    SLACK_WEBHOOK_URL: str = ""
+    APPROVAL_BASE_URL: str = "http://localhost:8001"
+    APPROVAL_TIMEOUT_MINUTES: int = 30
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

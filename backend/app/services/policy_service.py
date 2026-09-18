@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.agent import Agent
 from app.db.models.policy import Policy, PolicyVersion
-from app.policy_engine.evaluator import EvalContext, evaluate_policy
+from app.policy_engine.evaluator import EvalContext, EvalResult, evaluate_policy
 from app.policy_engine.versioning import create_policy_version
 from app.schemas.policy import PolicyDocument, PolicyEvaluationPreview
 
@@ -60,6 +60,23 @@ async def list_policies(db: AsyncSession, tenant_id: UUID) -> list[Policy]:
     return list(result.scalars().all())
 
 
+async def find_active_policy_for_tenant(
+    db: AsyncSession, tenant_id: UUID
+) -> Optional[Policy]:
+    """Return the (single) active policy for a tenant, or None.
+
+    Tier 1 simplification: one active policy per tenant.
+    Later, this becomes a set with routing rules.
+    """
+    result = await db.execute(
+        select(Policy)
+        .where(Policy.tenant_id == tenant_id, Policy.is_active == True)  # noqa: E712
+        .order_by(Policy.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def get_current_document(
     db: AsyncSession, policy: Policy
 ) -> Optional[PolicyDocument]:
@@ -84,11 +101,15 @@ async def evaluate_for_agent(
     resource_type: str,
     arguments: dict,
     data_classification: Optional[str] = None,
-) -> PolicyEvaluationPreview:
+) -> EvalResult:
     document = await get_current_document(db, policy)
     if not document:
-        return PolicyEvaluationPreview(
-            matched_rule=None, effect=None, reason="Policy has no versions"
+        # Return a neutral result — callers can treat this as "no match"
+        return EvalResult(
+            matched_rule=None,
+            effect=None,
+            reason="Policy has no versions",
+            priority=-1,
         )
 
     ctx = EvalContext(
@@ -99,9 +120,30 @@ async def evaluate_for_agent(
         arguments=arguments,
         data_classification=data_classification,
     )
-    result = evaluate_policy(document, ctx)
+    return evaluate_policy(document, ctx)
+
+
+async def preview_evaluation(
+    db: AsyncSession,
+    *,
+    policy: Policy,
+    agent: Agent,
+    action: str,
+    resource_type: str,
+    arguments: dict,
+    data_classification: Optional[str] = None,
+) -> PolicyEvaluationPreview:
+    r = await evaluate_for_agent(
+        db,
+        policy=policy,
+        agent=agent,
+        action=action,
+        resource_type=resource_type,
+        arguments=arguments,
+        data_classification=data_classification,
+    )
     return PolicyEvaluationPreview(
-        matched_rule=result.matched_rule,
-        effect=result.effect,
-        reason=result.reason,
+        matched_rule=r.matched_rule,
+        effect=r.effect,
+        reason=r.reason,
     )

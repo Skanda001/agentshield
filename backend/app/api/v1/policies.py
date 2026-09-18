@@ -93,7 +93,7 @@ async def evaluate(
     policy = await svc.get_policy(db, policy_id)
     if not policy:
         raise HTTPException(status_code=404, detail="Policy not found")
-    return await svc.evaluate_for_agent(
+    return await svc.preview_evaluation(
         db,
         policy=policy,
         agent=agent,

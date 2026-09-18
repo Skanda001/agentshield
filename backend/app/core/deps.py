@@ -1,7 +1,8 @@
 """Shared FastAPI dependencies."""
 from typing import AsyncGenerator, Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,8 +11,11 @@ from app.db.models.agent import Agent
 from app.db.session import AsyncSessionLocal
 
 
+# Declares a security scheme so Swagger UI shows the "Authorize" button.
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Provide a request-scoped database session."""
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -19,29 +23,19 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-def _extract_bearer(authorization: Optional[str]) -> Optional[str]:
-    if not authorization:
-        return None
-    parts = authorization.split(" ", 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None
-    return parts[1].strip()
-
-
 async def get_current_agent(
-    authorization: Optional[str] = Header(default=None),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> Agent:
     """Resolve the calling agent from the Authorization: Bearer <JWT> header."""
-    token = _extract_bearer(authorization)
-    if not token:
+    if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or malformed Authorization header",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_agent_token(token)
+    payload = decode_agent_token(credentials.credentials)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

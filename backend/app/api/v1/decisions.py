@@ -26,6 +26,7 @@ async def decide(
             arguments=payload.arguments,
             resource_type=payload.resource_type,
         ),
+        data_classification=payload.data_classification,
     )
     return result.response
 
