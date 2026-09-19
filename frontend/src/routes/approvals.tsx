@@ -8,6 +8,7 @@ export const Route = createFileRoute("/approvals")({
 
 function Approvals() {
   const qc = useQueryClient();
+
   const { data: approvals = [] } = useQuery({
     queryKey: ["approvals"],
     queryFn: async () => (await api.get("/approvals?status=pending")).data,
@@ -21,7 +22,13 @@ function Approvals() {
         decided_by: "ui-operator",
         note: approved ? "Approved via UI" : "Denied via UI",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["approvals"] }),
+    onSuccess: () => {
+      // Refresh both the approvals list and the dashboard counts
+      qc.invalidateQueries({ queryKey: ["approvals"] });
+      qc.invalidateQueries({ queryKey: ["approvals-all"] });
+      qc.invalidateQueries({ queryKey: ["decisions"] });
+      qc.invalidateQueries({ queryKey: ["audit-verify"] });
+    },
   });
 
   return (
@@ -50,13 +57,15 @@ function Approvals() {
             <div className="flex gap-2">
               <button
                 onClick={() => decide.mutate({ id: a.id, approved: true })}
-                className="px-4 py-2 bg-success/20 text-success rounded hover:bg-success/30"
+                disabled={decide.isPending}
+                className="px-4 py-2 bg-success/20 text-success rounded hover:bg-success/30 disabled:opacity-50"
               >
                 Approve
               </button>
               <button
                 onClick={() => decide.mutate({ id: a.id, approved: false })}
-                className="px-4 py-2 bg-danger/20 text-danger rounded hover:bg-danger/30"
+                disabled={decide.isPending}
+                className="px-4 py-2 bg-danger/20 text-danger rounded hover:bg-danger/30 disabled:opacity-50"
               >
                 Deny
               </button>
