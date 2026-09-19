@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     # API
     API_DOCS_ENABLED: bool = True
+    ALLOW_PUBLIC_DOCS: bool = False
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
     # Policy
@@ -45,10 +46,10 @@ class Settings(BaseSettings):
         default="replace-with-a-different-32-char-random-secret"
     )
 
-        # Kill switch
+    # Kill switch
     KILL_SWITCH_ENABLED: bool = True
 
-        # HITL
+    # HITL
     SLACK_WEBHOOK_URL: str = ""
     APPROVAL_BASE_URL: str = "http://localhost:8001"
     APPROVAL_TIMEOUT_MINUTES: int = 30
@@ -74,8 +75,12 @@ class Settings(BaseSettings):
                     raise ValueError(
                         f"{name} must be changed before running in production"
                     )
-            if self.API_DOCS_ENABLED:
-                raise ValueError("API_DOCS_ENABLED must be false in production")
+
+            if self.API_DOCS_ENABLED and not self.ALLOW_PUBLIC_DOCS:
+                raise ValueError(
+                    "API_DOCS_ENABLED must be false in production "
+                    "(or set ALLOW_PUBLIC_DOCS=true to explicitly allow it)"
+                )
         return self
 
 

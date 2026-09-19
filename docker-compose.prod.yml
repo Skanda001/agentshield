@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentshield-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentshield}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-agentshield}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentshield} -d ${POSTGRES_DB:-agentshield}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: agentshield-redis-prod
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agentshield-api-prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agentshield}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agentshield}
+      REDIS_URL: redis://redis:6379/0
+      AGENTSHIELD_JWT_SECRET: ${AGENTSHIELD_JWT_SECRET:?AGENTSHIELD_JWT_SECRET must be set}
+      AGENTSHIELD_JWT_ALGORITHM: HS256
+      AGENTSHIELD_ACCESS_TOKEN_MINUTES: 30
+      AUDIT_HMAC_SECRET: ${AUDIT_HMAC_SECRET:?AUDIT_HMAC_SECRET must be set}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-true}
+      ALLOW_PUBLIC_DOCS: ${ALLOW_PUBLIC_DOCS:-false}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      APPROVAL_BASE_URL: ${APPROVAL_BASE_URL:-http://localhost:8000}
+      APPROVAL_TIMEOUT_MINUTES: 30
+      POLICY_DIR: ./policies
+      PORT: 8000
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:

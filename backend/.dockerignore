@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+
+# Tests
+tests/
+pytest.ini
+.coverage
+htmlcov/
+
+# Local state
+.env
+.env.*
+*.log
+*.sqlite3
+*.db
+.run-logs/
+
+# Dev-only (not needed at runtime)
+demo_agent/
+sdk/
+scripts/
+attack_library/
+benchmark_results.json
+requirements-demo.txt
+requirements-redteam.txt
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+docker-compose.yml
+docker-compose.prod.yml
+.dockerignore
