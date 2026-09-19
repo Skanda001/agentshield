@@ -7,7 +7,7 @@
     "allowed": 3,
     "errors": 0,
     "protection_rate": 0.85,
-    "p95_latency_ms": 331.1489000043366
+    "p95_latency_ms": 204.39070000429638
   },
   "data_exfiltration": {
     "category": "data_exfiltration",
@@ -17,7 +17,7 @@
     "allowed": 0,
     "errors": 0,
     "protection_rate": 1.0,
-    "p95_latency_ms": 314.6531000093091
+    "p95_latency_ms": 173.04739999235608
   },
   "destructive_actions": {
     "category": "destructive_actions",
@@ -27,7 +27,7 @@
     "allowed": 0,
     "errors": 0,
     "protection_rate": 1.0,
-    "p95_latency_ms": 312.9130000015721
+    "p95_latency_ms": 170.0076999841258
   },
   "benign": {
     "category": "benign",
@@ -37,6 +37,6 @@
     "allowed": 103,
     "errors": 0,
     "protection_rate": 0.0,
-    "p95_latency_ms": 236.7200999869965
+    "p95_latency_ms": 130.02000001142733
   }
 }
