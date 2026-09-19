@@ -1,0 +1,24 @@
+name: demo_policy
+version: 1
+description: General policy for the demo agent.
+
+rules:
+  - name: allow_order_read
+    effect: allow
+    action: read
+    resource: order
+
+  - name: allow_customer_read
+    effect: allow
+    action: read
+    resource: customer
+
+  - name: deny_customer_delete
+    effect: deny
+    action: delete
+    resource: customer
+    priority: 100
+
+  - name: default_escalate
+    effect: escalate
+    priority: 1

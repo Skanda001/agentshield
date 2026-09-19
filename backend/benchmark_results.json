@@ -1,0 +1,42 @@
+{
+  "prompt_injection": {
+    "category": "prompt_injection",
+    "total": 20,
+    "blocked": 5,
+    "escalated": 12,
+    "allowed": 3,
+    "errors": 0,
+    "protection_rate": 0.85,
+    "p95_latency_ms": 331.1489000043366
+  },
+  "data_exfiltration": {
+    "category": "data_exfiltration",
+    "total": 15,
+    "blocked": 7,
+    "escalated": 8,
+    "allowed": 0,
+    "errors": 0,
+    "protection_rate": 1.0,
+    "p95_latency_ms": 314.6531000093091
+  },
+  "destructive_actions": {
+    "category": "destructive_actions",
+    "total": 15,
+    "blocked": 6,
+    "escalated": 9,
+    "allowed": 0,
+    "errors": 0,
+    "protection_rate": 1.0,
+    "p95_latency_ms": 312.9130000015721
+  },
+  "benign": {
+    "category": "benign",
+    "total": 103,
+    "blocked": 0,
+    "escalated": 0,
+    "allowed": 103,
+    "errors": 0,
+    "protection_rate": 0.0,
+    "p95_latency_ms": 236.7200999869965
+  }
+}
