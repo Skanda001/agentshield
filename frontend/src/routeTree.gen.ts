@@ -10,23 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApprovalsRouteImport } from './routes/approvals'
-import { Route as KillSwitchRouteImport } from './routes/kill-switch'
+import { Route as AppRouteImport } from './routes/app'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppApprovalsRouteImport } from './routes/app.approvals'
+import { Route as AppAuditRouteImport } from './routes/app.audit'
+import { Route as AppKillSwitchRouteImport } from './routes/app.kill-switch'
+import { Route as AppPoliciesRouteImport } from './routes/app.policies'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApprovalsRoute = ApprovalsRouteImport.update({
-  id: '/approvals',
-  path: '/approvals',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const KillSwitchRoute = KillSwitchRouteImport.update({
-  id: '/kill-switch',
-  path: '/kill-switch',
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -34,38 +33,97 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppApprovalsRoute = AppApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAuditRoute = AppAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppKillSwitchRoute = AppKillSwitchRouteImport.update({
+  id: '/kill-switch',
+  path: '/kill-switch',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPoliciesRoute = AppPoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
-  '/kill-switch': typeof KillSwitchRoute
+  '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/kill-switch': typeof AppKillSwitchRoute
+  '/app/policies': typeof AppPoliciesRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
-  '/kill-switch': typeof KillSwitchRoute
   '/login': typeof LoginRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/kill-switch': typeof AppKillSwitchRoute
+  '/app/policies': typeof AppPoliciesRoute
+  '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/approvals': typeof ApprovalsRoute
-  '/kill-switch': typeof KillSwitchRoute
+  '/app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/app/approvals': typeof AppApprovalsRoute
+  '/app/audit': typeof AppAuditRoute
+  '/app/kill-switch': typeof AppKillSwitchRoute
+  '/app/policies': typeof AppPoliciesRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/approvals' | '/kill-switch' | '/login'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/login'
+    | '/app/approvals'
+    | '/app/audit'
+    | '/app/kill-switch'
+    | '/app/policies'
+    | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/approvals' | '/kill-switch' | '/login'
-  id: '__root__' | '/' | '/approvals' | '/kill-switch' | '/login'
+  to:
+    | '/'
+    | '/login'
+    | '/app/approvals'
+    | '/app/audit'
+    | '/app/kill-switch'
+    | '/app/policies'
+    | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/login'
+    | '/app/approvals'
+    | '/app/audit'
+    | '/app/kill-switch'
+    | '/app/policies'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApprovalsRoute: typeof ApprovalsRoute
-  KillSwitchRoute: typeof KillSwitchRoute
+  AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
 }
 
@@ -78,18 +136,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/approvals': {
-      id: '/approvals'
-      path: '/approvals'
-      fullPath: '/approvals'
-      preLoaderRoute: typeof ApprovalsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/kill-switch': {
-      id: '/kill-switch'
-      path: '/kill-switch'
-      fullPath: '/kill-switch'
-      preLoaderRoute: typeof KillSwitchRouteImport
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -99,13 +150,65 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/approvals': {
+      id: '/app/approvals'
+      path: '/approvals'
+      fullPath: '/app/approvals'
+      preLoaderRoute: typeof AppApprovalsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/audit': {
+      id: '/app/audit'
+      path: '/audit'
+      fullPath: '/app/audit'
+      preLoaderRoute: typeof AppAuditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/kill-switch': {
+      id: '/app/kill-switch'
+      path: '/kill-switch'
+      fullPath: '/app/kill-switch'
+      preLoaderRoute: typeof AppKillSwitchRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/policies': {
+      id: '/app/policies'
+      path: '/policies'
+      fullPath: '/app/policies'
+      preLoaderRoute: typeof AppPoliciesRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppApprovalsRoute: typeof AppApprovalsRoute
+  AppAuditRoute: typeof AppAuditRoute
+  AppKillSwitchRoute: typeof AppKillSwitchRoute
+  AppPoliciesRoute: typeof AppPoliciesRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppApprovalsRoute: AppApprovalsRoute,
+  AppAuditRoute: AppAuditRoute,
+  AppKillSwitchRoute: AppKillSwitchRoute,
+  AppPoliciesRoute: AppPoliciesRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApprovalsRoute: ApprovalsRoute,
-  KillSwitchRoute: KillSwitchRoute,
+  AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport

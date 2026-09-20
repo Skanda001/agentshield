@@ -10,7 +10,6 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Simple unique suffix so each demo session gets its own tenant
 function uniqueSuffix(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -49,13 +48,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const tokenRes = await api.post("/agents/token", { api_key: apiKey });
     localStorage.setItem("token", tokenRes.data.access_token);
 
-    // 4. Load demo policy (best effort — ignore failures)
+    // 4. Load demo policy (best effort)
     try {
       await api.post(
         `/policies/load-yaml?tenant_id=${tenantId}&file_path=policies/demo.yaml`
       );
     } catch (err) {
-      // Ignore — some attacks just fall back to risk engine only
       console.warn("Demo policy load failed (non-fatal):", err);
     }
 
@@ -65,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     localStorage.removeItem("token");
     setIsAuthenticated(false);
-    window.location.href = "/login";
+    window.location.href = "/";
   };
 
   return (
