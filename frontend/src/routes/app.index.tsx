@@ -123,26 +123,42 @@ function Dashboard() {
             <tbody>
               {decisions.slice(0, 25).map((d) => {
                 const ap = approvalByDecision[d.id];
+                const reason = d.reasons?.[0] ?? "";
                 return (
                   <tr
                     key={d.id}
                     className="border-b border-border/40 hover:bg-panel-hover transition-colors"
                   >
-                    <td className="px-5 py-3 text-gray-500 font-mono text-xs">
+                    <td className="px-5 py-3 text-gray-500 font-mono text-xs align-top">
                       {new Date(d.created_at).toLocaleTimeString()}
                     </td>
-                    <td className="px-5 py-3 font-mono text-xs">{d.tool}</td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3 align-top">
+                      <div className="font-mono text-xs">{d.tool}</div>
+                      {reason && (
+                        <div
+                          className={`text-[11px] mt-0.5 truncate max-w-xs ${
+                            d.verdict === "BLOCK"
+                              ? "text-danger/70"
+                              : d.verdict === "ESCALATE"
+                              ? "text-warn/70"
+                              : "text-gray-500"
+                          }`}
+                        >
+                          {reason}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 align-top">
                       <VerdictBadge verdict={d.verdict} />
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3 align-top">
                       {ap ? (
                         <ApprovalBadge status={ap.status} />
                       ) : (
                         <span className="text-gray-700 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-5 py-3 text-right text-xs text-gray-400 font-mono">
+                    <td className="px-5 py-3 text-right text-xs text-gray-400 font-mono align-top">
                       {Math.round(d.risk_score)}
                     </td>
                   </tr>

@@ -8,6 +8,7 @@ type Decision = {
   tool: string;
   verdict: string;
   risk_score: number;
+  reasons: string[];
   created_at: string;
 };
 
@@ -36,29 +37,47 @@ export default function LiveStream() {
           No decisions yet. Click "Run demo" in the top bar.
         </div>
       ) : (
-        <div className="space-y-1.5">
-          {latest.map((d, i) => (
-            <div
-              key={d.id}
-              className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-panel-hover transition-colors animate-fade-in"
-              style={{ animationDelay: `${i * 30}ms` }}
-            >
-              <span className="text-xs text-gray-500 font-mono w-16 flex-shrink-0">
-                {new Date(d.created_at).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </span>
-              <span className="font-mono text-sm flex-1 truncate">
-                {d.tool}
-              </span>
-              <VerdictBadge verdict={d.verdict} />
-              <span className="text-xs text-gray-500 w-8 text-right">
-                {Math.round(d.risk_score)}
-              </span>
-            </div>
-          ))}
+        <div className="space-y-1">
+          {latest.map((d, i) => {
+            const reason = d.reasons?.[0] ?? "";
+            return (
+              <div
+                key={d.id}
+                className="py-2 px-3 rounded-lg hover:bg-panel-hover transition-colors animate-fade-in"
+                style={{ animationDelay: `${i * 30}ms` }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-500 font-mono w-16 flex-shrink-0">
+                    {new Date(d.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </span>
+                  <span className="font-mono text-sm flex-1 truncate">
+                    {d.tool}
+                  </span>
+                  <VerdictBadge verdict={d.verdict} />
+                  <span className="text-xs text-gray-500 w-8 text-right">
+                    {Math.round(d.risk_score)}
+                  </span>
+                </div>
+                {reason && (
+                  <div
+                    className={`text-xs mt-0.5 pl-[76px] truncate ${
+                      d.verdict === "BLOCK"
+                        ? "text-danger/70"
+                        : d.verdict === "ESCALATE"
+                        ? "text-warn/70"
+                        : "text-gray-500"
+                    }`}
+                  >
+                    {reason}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
