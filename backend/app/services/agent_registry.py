@@ -1,6 +1,8 @@
 """Business logic for tenants and agents."""
 from typing import Optional
 from uuid import UUID
+from sqlalchemy.exc import IntegrityError
+
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,10 +27,16 @@ async def create_tenant(
 
     tenant = Tenant(name=name, slug=slug)
     db.add(tenant)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        raise RegistryError(
+            "Tenant could not be created (duplicate or invalid)"
+        ) from e
+
     await db.refresh(tenant)
     return tenant
-
 
 async def get_tenant(db: AsyncSession, tenant_id: UUID) -> Optional[Tenant]:
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
