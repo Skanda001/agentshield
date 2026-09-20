@@ -123,29 +123,31 @@ function Dashboard() {
             <tbody>
               {decisions.slice(0, 25).map((d) => {
                 const ap = approvalByDecision[d.id];
-                const reason = d.reasons?.[0] ?? "";
+                const reasons = d.reasons ?? [];
+                const colorClass =
+                  d.verdict === "BLOCK"
+                    ? "text-danger/70"
+                    : d.verdict === "ESCALATE"
+                    ? "text-warn/70"
+                    : "text-gray-500";
                 return (
                   <tr
                     key={d.id}
                     className="border-b border-border/40 hover:bg-panel-hover transition-colors"
                   >
-                    <td className="px-5 py-3 text-gray-500 font-mono text-xs align-top">
+                    <td className="px-5 py-3 text-gray-500 font-mono text-xs align-top whitespace-nowrap">
                       {new Date(d.created_at).toLocaleTimeString()}
                     </td>
                     <td className="px-5 py-3 align-top">
                       <div className="font-mono text-xs">{d.tool}</div>
-                      {reason && (
-                        <div
-                          className={`text-[11px] mt-0.5 truncate max-w-xs ${
-                            d.verdict === "BLOCK"
-                              ? "text-danger/70"
-                              : d.verdict === "ESCALATE"
-                              ? "text-warn/70"
-                              : "text-gray-500"
-                          }`}
-                        >
-                          {reason}
-                        </div>
+                      {reasons.length > 0 && (
+                        <ul className="text-[11px] mt-1 space-y-0.5">
+                          {reasons.map((r, idx) => (
+                            <li key={idx} className={colorClass}>
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </td>
                     <td className="px-5 py-3 align-top">

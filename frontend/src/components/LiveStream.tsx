@@ -39,7 +39,13 @@ export default function LiveStream() {
       ) : (
         <div className="space-y-1">
           {latest.map((d, i) => {
-            const reason = d.reasons?.[0] ?? "";
+            const reasons = d.reasons ?? [];
+            const colorClass =
+              d.verdict === "BLOCK"
+                ? "text-danger/70"
+                : d.verdict === "ESCALATE"
+                ? "text-warn/70"
+                : "text-gray-500";
             return (
               <div
                 key={d.id}
@@ -62,18 +68,14 @@ export default function LiveStream() {
                     {Math.round(d.risk_score)}
                   </span>
                 </div>
-                {reason && (
-                  <div
-                    className={`text-xs mt-0.5 pl-[76px] truncate ${
-                      d.verdict === "BLOCK"
-                        ? "text-danger/70"
-                        : d.verdict === "ESCALATE"
-                        ? "text-warn/70"
-                        : "text-gray-500"
-                    }`}
-                  >
-                    {reason}
-                  </div>
+                {reasons.length > 0 && (
+                  <ul className="text-[11px] mt-1 pl-[76px] space-y-0.5">
+                    {reasons.map((r, idx) => (
+                      <li key={idx} className={colorClass}>
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             );
