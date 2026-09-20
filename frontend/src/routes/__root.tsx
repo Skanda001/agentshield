@@ -23,14 +23,12 @@ function RootLayout() {
           <NavLink to="/approvals" label="Approvals" />
           <NavLink to="/kill-switch" label="Kill Switch" />
         </nav>
-        {isAuthenticated && (
-          <button
-            onClick={logout}
-            className="mt-8 w-full text-sm text-gray-400 hover:text-white text-left"
-          >
-            Logout
-          </button>
-        )}
+        <button
+          onClick={logout}
+          className="mt-8 w-full text-sm text-gray-400 hover:text-white text-left"
+        >
+          Logout
+        </button>
       </aside>
       <main className="flex-1 p-8 overflow-y-auto">
         <Outlet />

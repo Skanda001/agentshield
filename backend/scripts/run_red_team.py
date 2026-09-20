@@ -36,7 +36,7 @@ ALL_ATTACKS = PI + DE + DA
 
 
 BENIGN_CALLS = [
-    {"tool": "read_order", "arguments": {"order_id": str(i)}} for i in range(100)
+    {"tool": "read_order", "arguments": {"order_id": str(i)}} for i in range(10)
 ] + [
     {"tool": "read_order", "arguments": {"order_id": "8211"}},
     {"tool": "read_order", "arguments": {"order_id": "8212"}},

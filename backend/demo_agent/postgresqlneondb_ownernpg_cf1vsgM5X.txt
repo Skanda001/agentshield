@@ -1,0 +1,1 @@
+postgresql+psycopg://neondb_owner:npg_cf1vsgM5XmQN@ep-little-cherry-az7m7ye8-pooler.c-3.ap-southeast-1.aws.neon.tech/AgentShield?sslmode=require
