@@ -1,0 +1,298 @@
+name: enterprise_policy
+version: 1
+description: >
+  Production-grade policy for a multi-role organization. Covers support,
+  finance, engineering, and admin agents with explicit allow, deny, and
+  escalate rules. Demonstrates specificity + priority resolution.
+
+# ─────────────────────────────────────────────────────────────────
+# Rules are matched by field (agent, role, action, resource) and by
+# optional conditions (data_classification, destination, min_volume).
+#
+# Resolution order:
+#   1. Specificity (more constraints wins)
+#   2. Priority (higher number wins)
+#   3. Restrictiveness (deny > escalate > allow) as tiebreaker
+# ─────────────────────────────────────────────────────────────────
+
+rules:
+  # ═══════════════════════════════════════════════════════════════
+  # SUPPORT AGENT — safe read operations
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: support_read_order
+    effect: allow
+    role: support
+    action: read
+    resource: order
+
+  - name: support_read_product
+    effect: allow
+    role: support
+    action: read
+    resource: product
+
+  - name: support_read_customer_small_volume
+    effect: allow
+    role: support
+    action: read
+    resource: customer
+    conditions:
+      max_volume: 10
+    priority: 10
+
+  # ═══════════════════════════════════════════════════════════════
+  # SUPPORT AGENT — write operations (escalate, not block)
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: support_update_order_status
+    effect: escalate
+    role: support
+    action: update
+    resource: order
+    priority: 20
+
+  - name: support_send_customer_email
+    effect: escalate
+    role: support
+    action: send
+    resource: email
+    priority: 30
+
+  # ═══════════════════════════════════════════════════════════════
+  # SUPPORT AGENT — explicit denials
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: support_cannot_delete_customer
+    effect: deny
+    role: support
+    action: delete
+    resource: customer
+    priority: 100
+
+  - name: support_cannot_delete_order
+    effect: deny
+    role: support
+    action: delete
+    resource: order
+    priority: 100
+
+  - name: support_cannot_access_credentials
+    effect: deny
+    role: support
+    action: read
+    resource: credential
+    priority: 150
+
+  - name: support_cannot_read_audit
+    effect: deny
+    role: support
+    action: read
+    resource: audit
+    priority: 120
+
+  - name: support_cannot_admin
+    effect: deny
+    role: support
+    action: admin
+    priority: 200
+
+  # ═══════════════════════════════════════════════════════════════
+  # BULK OPERATIONS — always escalate, never silently allow
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: bulk_customer_read_escalate
+    effect: escalate
+    action: read
+    resource: customer
+    conditions:
+      min_volume: 50
+    priority: 60
+
+  - name: bulk_order_read_escalate
+    effect: escalate
+    action: read
+    resource: order
+    conditions:
+      min_volume: 100
+    priority: 60
+
+  - name: bulk_delete_always_deny
+    effect: deny
+    action: delete
+    conditions:
+      min_volume: 10
+    priority: 300
+
+  # ═══════════════════════════════════════════════════════════════
+  # DATA CLASSIFICATION — PII / restricted data
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: restricted_data_requires_escalation
+    effect: escalate
+    action: read
+    conditions:
+      data_classification: restricted
+    priority: 70
+
+  - name: restricted_data_external_send_deny
+    effect: deny
+    action: send
+    conditions:
+      data_classification: restricted
+      destination: external
+    priority: 400
+
+  - name: confidential_data_external_send_escalate
+    effect: escalate
+    action: send
+    conditions:
+      data_classification: confidential
+      destination: external
+    priority: 80
+
+  # ═══════════════════════════════════════════════════════════════
+  # ENGINEERING AGENT — codebase and infra access
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: engineering_read_logs
+    effect: allow
+    role: engineering
+    action: read
+    resource: audit
+    priority: 10
+
+  - name: engineering_read_config
+    effect: allow
+    role: engineering
+    action: read
+    resource: config
+    priority: 10
+
+  - name: engineering_cannot_delete_data
+    effect: deny
+    role: engineering
+    action: delete
+    resource: customer
+    priority: 200
+
+  - name: engineering_cannot_delete_order
+    effect: deny
+    role: engineering
+    action: delete
+    resource: order
+    priority: 200
+
+  - name: engineering_credentials_escalate
+    effect: escalate
+    role: engineering
+    action: read
+    resource: credential
+    priority: 90
+
+  # ═══════════════════════════════════════════════════════════════
+  # FINANCE AGENT — invoice and payment access
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: finance_read_invoice
+    effect: allow
+    role: finance
+    action: read
+    resource: invoice
+
+  - name: finance_read_payment
+    effect: allow
+    role: finance
+    action: read
+    resource: payment
+
+  - name: finance_update_payment_escalate
+    effect: escalate
+    role: finance
+    action: update
+    resource: payment
+    priority: 30
+
+  - name: finance_delete_invoice_deny
+    effect: deny
+    role: finance
+    action: delete
+    resource: invoice
+    priority: 150
+
+  - name: finance_cannot_read_customer_pii
+    effect: deny
+    role: finance
+    action: read
+    resource: customer
+    priority: 100
+
+  # ═══════════════════════════════════════════════════════════════
+  # ADMIN AGENT — highest privileges, but not unlimited
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: admin_read_everything
+    effect: allow
+    role: admin
+    action: read
+    priority: 5
+
+  - name: admin_write_escalate
+    effect: escalate
+    role: admin
+    action: write
+    priority: 40
+
+  - name: admin_delete_escalate
+    effect: escalate
+    role: admin
+    action: delete
+    priority: 50
+
+  - name: admin_cannot_bulk_delete
+    effect: deny
+    role: admin
+    action: delete
+    conditions:
+      min_volume: 100
+    priority: 350
+
+  - name: admin_cannot_external_pii_dump
+    effect: deny
+    role: admin
+    action: send
+    conditions:
+      data_classification: restricted
+      destination: external
+    priority: 400
+
+  # ═══════════════════════════════════════════════════════════════
+  # CROSS-ROLE SAFETY NETS
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: never_send_credentials_external
+    effect: deny
+    action: send
+    resource: credential
+    conditions:
+      destination: external
+    priority: 500
+
+  - name: never_drop_tables
+    effect: deny
+    action: drop
+    priority: 500
+
+  - name: never_admin_from_non_admin
+    effect: deny
+    action: admin
+    agent: support-bot
+    priority: 400
+
+  # ═══════════════════════════════════════════════════════════════
+  # DEFAULT — catch-all
+  # ═══════════════════════════════════════════════════════════════
+
+  - name: default_escalate_unknown
+    effect: escalate
+    priority: 1
