@@ -1,25 +1,29 @@
 """End-to-end smoke test for tenant + agent + token + me flow."""
+import uuid
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete
 
+from app.db.models.agent import Agent
+from app.db.models.tenant import Tenant
+from app.db.session import AsyncSessionLocal
 from app.main import app
 
 
 @pytest.mark.asyncio
 async def test_full_agent_flow():
     transport = ASGITransport(app=app)
+    slug = f"acme-support-{uuid.uuid4().hex[:8]}"
+    tenant_id = None
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # 1. Create tenant
         r = await client.post(
             "/api/v1/tenants",
-            json={"name": "Acme Support", "slug": "acme-support"},
+            json={"name": f"Acme Support {slug}", "slug": slug},
         )
-        assert r.status_code in (201, 400), r.text  # 400 if test rerun
-        if r.status_code == 201:
-            tenant_id = r.json()["id"]
-        else:
-            # fetch not implemented yet; re-run in clean DB
-            pytest.skip("Tenant already exists; run against a clean DB")
+        assert r.status_code == 201, r.text
+        tenant_id = r.json()["id"]
 
         # 2. Create agent
         r = await client.post(
@@ -59,3 +63,9 @@ async def test_full_agent_flow():
             json={"api_key": "ash_totally_wrong_key_here"},
         )
         assert r.status_code == 401
+
+    if tenant_id:
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Agent).where(Agent.tenant_id == uuid.UUID(tenant_id)))
+            await db.execute(delete(Tenant).where(Tenant.id == uuid.UUID(tenant_id)))
+            await db.commit()

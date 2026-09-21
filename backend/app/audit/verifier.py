@@ -51,8 +51,9 @@ async def verify_chain(
     if from_seq is None or from_seq == 1:
         expected_prev = GENESIS_HASH
     else:
-        predecessor_seq = from_seq - 1
-        pred = await db.execute(select(AuditLog).where(AuditLog.seq == predecessor_seq))
+        pred = await db.execute(
+            select(AuditLog).where(AuditLog.seq < from_seq).order_by(AuditLog.seq.desc()).limit(1)
+        )
         pred_row = pred.scalar_one_or_none()
         expected_prev = pred_row.hash if pred_row else GENESIS_HASH
 
