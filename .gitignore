@@ -1,9 +1,3 @@
-
----
-
-### 2. `.gitignore` (project root) — what never gets committed
-
-```gitignore
 # Env and secrets
 .env
 .env.*
@@ -37,3 +31,8 @@ redis_data/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Secrets
+setenv.bat
+neon-url.txt
+postgresqlneondb_*.txt
