@@ -34,3 +34,19 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
+
+## Tests
+
+The full suite is 68 tests. 67 pass; 1 is an opt-in integration test.
+
+```bash
+cd backend
+pip install -r requirements.txt
+
+# Unit tests only (no database required)
+pytest tests/unit tests/test_risk_engine.py tests/test_policy_engine.py \
+       tests/test_injection.py tests/test_pii.py
+
+# Full suite (requires Postgres on port 5433)
+cd .. && docker compose up -d
+cd backend && pytest -v

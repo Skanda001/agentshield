@@ -27,7 +27,7 @@ def hash_api_key(api_key: str) -> str:
     - A fixed HMAC key means a stolen DB cannot be brute-forced offline.
     """
     return hmac.new(
-        settings.AGENTSHIELD_JWT_SECRET.encode(),
+        settings.API_KEY_HMAC_SECRET.encode(),
         api_key.encode(),
         hashlib.sha256,
     ).hexdigest()

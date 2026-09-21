@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     AUDIT_HMAC_SECRET: str = Field(
         default="replace-with-a-different-32-char-random-secret"
     )
+        # API key hashing
+    API_KEY_HMAC_SECRET: str = Field(
+        default="replace-with-a-third-32-char-random-secret"
+    )
 
     # Kill switch
     KILL_SWITCH_ENABLED: bool = True
@@ -58,7 +62,7 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
-    @field_validator("AGENTSHIELD_JWT_SECRET", "AUDIT_HMAC_SECRET")
+    @field_validator("AGENTSHIELD_JWT_SECRET", "AUDIT_HMAC_SECRET", "API_KEY_HMAC_SECRET")
     @classmethod
     def _min_length(cls, v: str) -> str:
         if len(v) < 32:
