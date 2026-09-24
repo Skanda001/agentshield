@@ -13,7 +13,7 @@ from app.core.config import settings
 # event loops. Recommended for FastAPI + SQLAlchemy async.
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=(settings.APP_ENV == "development"),
+    echo=False,
     pool_pre_ping=True,
     poolclass=NullPool,
 )
