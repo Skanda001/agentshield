@@ -14,12 +14,14 @@ Both paths:
   * call the @shield.protect-wrapped functions in demo_agent.db_tools
   * catch ShieldHitl / ShieldBlocked per step
   * emit one event per tool call via the async `emit` callback
+  * on HITL, create an Approval row so the UI can approve/reject
 
 CLI: see demo_agent/cli.py
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 from typing import Annotated, Any, Awaitable, Callable, Optional, TypedDict
@@ -56,6 +58,8 @@ from demo_agent.events import (
 )
 
 load_dotenv()
+
+log = logging.getLogger("demo_agent.support_agent")
 
 EventCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
@@ -144,6 +148,93 @@ def _collect_findings(
 
 
 # ─────────────────────────────────────────────────────────────
+# HITL → Approval row (for the UI's approve/reject buttons)
+# ─────────────────────────────────────────────────────────────
+
+async def _create_approval_for_hitl(
+    *,
+    tool: str,
+    resource_type: str,
+    args: dict[str, Any],
+    run_id: str,
+    risk: int,
+    reasons: list[str],
+) -> Optional[str]:
+    """Best-effort: create an Approval row so the UI can approve/reject.
+
+    Returns the approval id, or None if we couldn't (e.g. no agent in DB).
+    Never raises — a demo run must not fail just because the approval
+    record didn't get created.
+    """
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        from sqlalchemy import select
+
+        from app.db.models.agent import Agent
+        from app.db.models.approval import Approval
+        from app.db.models.decision import Decision
+        from app.db.session import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as db:
+            agent = (
+                await db.execute(
+                    select(Agent).where(Agent.name == "demo-cli-agent").limit(1)
+                )
+            ).scalar_one_or_none()
+
+            if agent is None:
+                # Fallback: any active agent (demo convenience)
+                agent = (
+                    await db.execute(
+                        select(Agent).where(Agent.is_active == True).limit(1)  # noqa: E712
+                    )
+                ).scalar_one_or_none()
+
+            if agent is None:
+                log.warning("hitl: no agent row found — skipping approval creation")
+                return None
+
+            decision = Decision(
+                agent_id=agent.id,
+                tenant_id=agent.tenant_id,
+                tool=tool,
+                action="execute",
+                resource_type=resource_type,
+                arguments=args,
+                verdict="ESCALATE",
+                risk_score=float(risk),
+                reasons=reasons,
+                signals=[],
+            )
+            db.add(decision)
+            await db.flush()  # populate decision.id
+
+            approval = Approval(
+                decision_id=decision.id,
+                agent_id=agent.id,
+                tenant_id=agent.tenant_id,
+                status="pending",
+                tool=tool,
+                resource_type=resource_type,
+                request_context={
+                    "args": args,
+                    "run_id": run_id,
+                    "reasons": reasons,
+                },
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+            )
+            db.add(approval)
+            await db.commit()
+            await db.refresh(approval)
+            return str(approval.id)
+
+    except Exception as e:  # noqa: BLE001
+        log.warning("hitl: approval creation skipped: %s", e)
+        return None
+
+
+# ─────────────────────────────────────────────────────────────
 # Shared emit-and-decide helper
 # ─────────────────────────────────────────────────────────────
 
@@ -155,19 +246,21 @@ async def _call_tool(
     step: int,
     emit: EventCallback,
 ) -> dict[str, Any]:
-    """Run one tool through shield, emit its event, return the result.
-
-    On ALLOW, returns {"ok": True, "result": <tool output>}.
-    On HITL,  returns {"ok": False, "reason": "hitl", "error": <str>}.
-    On BLOCK, returns {"ok": False, "reason": "blocked", "error": <str>}.
-    Never raises — the agent loop wants a clean outcome either way.
-    """
+    """Run one tool through shield, emit its event, return the result."""
     fn = TOOLS[tool]
     safe_args = redact_args(args)
 
     try:
         result = await fn(**args)
     except ShieldHitl as e:
+        approval_id = await _create_approval_for_hitl(
+            tool=tool,
+            resource_type=TOOL_META.get(tool, {}).get("resource_type", "unknown"),
+            args=args,
+            run_id=run_id,
+            risk=e.risk,
+            reasons=e.reasons,
+        )
         await emit(make_event(
             run_id=run_id, step=step, tool=tool, args=safe_args,
             decision="HITL",
@@ -175,9 +268,15 @@ async def _call_tool(
             findings=_collect_findings(tool, args, e.risk, e.reasons),
             attempted=True, executed=False,
             audit_id=e.audit_id,
+            approval_id=approval_id,
             error=str(e),
         ))
-        return {"ok": False, "reason": "hitl", "error": str(e)}
+        return {
+            "ok": False,
+            "reason": "hitl",
+            "error": str(e),
+            "approval_id": approval_id,
+        }
 
     except ShieldBlocked as e:
         await emit(make_event(
@@ -395,9 +494,7 @@ async def run_live(
 
     initial: AgentState = {"messages": [HumanMessage(content=prompt)]}
 
-    # Stream, capturing the final AI message as we go.
     async for chunk in compiled.astream(initial):
-        # Each chunk is {node_name: {"messages": [...]}}
         for _node, payload in chunk.items():
             for msg in payload.get("messages", []) if isinstance(payload, dict) else []:
                 if isinstance(msg, AIMessage):
@@ -406,10 +503,10 @@ async def run_live(
                     if content and not tool_calls:
                         final_holder["text"] = content
 
-    # Emit a synthetic "agent.final" event so the UI has the closing text.
     if final_holder["text"]:
+        from demo_agent.events import now_iso
         await emit({
-            "ts": make_event.__globals__["now_iso"](),
+            "ts": now_iso(),
             "run_id": run_id,
             "agent_id": "email-agent",
             "agent_version": "1.0.0",
@@ -422,6 +519,7 @@ async def run_live(
             "execution": {"attempted": True, "executed": True},
             "audit_id": None,
             "audit_seq": None,
+            "approval_id": None,
             "text": final_holder["text"],
         })
 

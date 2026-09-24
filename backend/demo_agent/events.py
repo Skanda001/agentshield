@@ -30,6 +30,7 @@ def make_event(
     executed: bool,
     audit_id: Optional[str] = None,
     audit_seq: Optional[int] = None,
+    approval_id: Optional[str] = None,
     agent_id: str = "email-agent",
     agent_version: str = "1.0.0",
     error: Optional[str] = None,
@@ -55,6 +56,7 @@ def make_event(
         },
         "audit_id": audit_id,
         "audit_seq": audit_seq,
+        "approval_id": approval_id,
     }
     if error:
         event["error"] = error

@@ -1,0 +1,1 @@
+"""Demo surface: WebSocket event bus + HTTP fallbacks for the demo agent."""
