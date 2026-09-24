@@ -6,12 +6,14 @@ import {
   FileText,
   ScrollText,
   Zap,
+  Radio,
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
 const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/app/demo", label: "Live Demo", icon: Radio, exact: false },
   { to: "/app/approvals", label: "Approvals", icon: CheckCircle2, exact: false },
   { to: "/app/policies", label: "Policies", icon: FileText, exact: false },
   { to: "/app/audit", label: "Audit Log", icon: ScrollText, exact: false },
@@ -25,7 +27,6 @@ export default function Sidebar() {
 
   return (
     <aside className="w-60 flex-shrink-0 border-r border-border bg-panel/40 flex flex-col">
-      {/* Brand */}
       <Link
         to="/"
         className="flex items-center gap-2.5 px-5 py-5 border-b border-border hover:bg-panel-hover transition-colors"
@@ -36,7 +37,6 @@ export default function Sidebar() {
         <span className="font-bold tracking-tight">AgentShield</span>
       </Link>
 
-      {/* Nav */}
       <nav className="flex-1 py-4 px-3 space-y-0.5">
         {NAV.map((item) => {
           const isActive = item.exact ? path === item.to : path.startsWith(item.to);
@@ -61,7 +61,6 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Logout */}
       <div className="p-3 border-t border-border">
         <button
           onClick={logout}

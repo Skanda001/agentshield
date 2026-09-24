@@ -9,6 +9,7 @@ from app.api.v1.audit import router as audit_router
 from app.api.v1.approvals import router as approvals_router
 from app.api.v1.kill_switch import router as kill_switch_router
 from app.demo.routes import router as demo_router
+from app.demo.interactive_routes import router as interactive_agent_router
 
 
 api_router = APIRouter(prefix="/api/v1")
@@ -20,3 +21,4 @@ api_router.include_router(audit_router)
 api_router.include_router(approvals_router)
 api_router.include_router(kill_switch_router)
 api_router.include_router(demo_router)
+api_router.include_router(interactive_agent_router)
