@@ -89,8 +89,7 @@ function DemoPage() {
       onEvent: appendEvent,
       onDone: () => setRunning(false),
       onError: (msg) => {
-        setError(msg);
-        setRunning(false);
+        console.warn("WebSocket non-fatal warning:", msg);
       },
     });
     wsRef.current = ws;
@@ -150,8 +149,7 @@ function DemoPage() {
       onEvent: appendEvent,
       onDone: () => setRunning(false),
       onError: (msg) => {
-        setError(msg);
-        setRunning(false);
+        console.warn("WebSocket non-fatal warning:", msg);
       },
     });
     wsRef.current = ws;
