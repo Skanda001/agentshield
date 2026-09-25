@@ -6,23 +6,38 @@ providing security test prompt suggestions.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_agent, get_db
+from app.core.security import decode_agent_token
 from app.db.models.agent import Agent
 from app.db.models.approval import Approval
 from app.demo.bus import bus
 from app.services import approval_service as svc
-from demo_agent.customer_support_agent import TOOLS, run_customer_support_agent
+
+# The demo agent is a client of AgentShield; guard import so AgentShield starts cleanly in production Docker
+try:
+    from demo_agent.customer_support_agent import TOOLS, run_customer_support_agent
+except (ImportError, ModuleNotFoundError):
+    TOOLS = {}
+    run_customer_support_agent = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["interactive-agent"])
@@ -119,6 +134,15 @@ async def run_agent_prompt(
     """
     if not payload.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt must not be empty.")
+
+    if run_customer_support_agent is None:
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "The demo agent is a standalone client and is not bundled inside the AgentShield core server image. "
+                "To run the demo agent, execute it as a client using: python -m demo_agent.customer_support_agent"
+            ),
+        )
 
     collected: list[dict[str, Any]] = []
     run_id_holder: dict[str, str] = {}
@@ -366,4 +390,73 @@ async def decide_approval_endpoint(
             agent_response=agent_response,
             updated_event=updated_event,
         )
+
+
+# ─────────────────────────────────────────────────────────────
+# WebSocket: Live Event Stream Subscription
+# ─────────────────────────────────────────────────────────────
+
+@router.websocket("/demo/ws")
+async def demo_ws(
+    websocket: WebSocket,
+    run_id: str = Query(..., description="Client-chosen run_id"),
+    token: str = Query(..., description="agent JWT — WS can't carry Authorization headers"),
+):
+    """Subscribe to the live event stream for a run.
+
+    Events arrive as JSON, one per frame. A terminal {"__done__": true}
+    frame signals completion. Bad token -> 4401 close code.
+    """
+    payload = decode_agent_token(token)
+    if not payload:
+        await websocket.close(code=4401, reason="invalid token")
+        return
+
+    await websocket.accept()
+
+    q = await bus.subscribe(run_id)
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                await websocket.send_text(json.dumps({"__ping__": True}))
+                continue
+
+            if event.get("__done__"):
+                await websocket.send_text(json.dumps({"__done__": True}))
+                break
+
+            await websocket.send_text(json.dumps(event, default=str))
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:  # noqa: BLE001
+        logger.exception("demo.ws.error: %s", e)
+    finally:
+        await bus.unsubscribe(run_id, q)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+
+# ─────────────────────────────────────────────────────────────
+# Legacy Endpoints (Backwards Compatibility)
+# ─────────────────────────────────────────────────────────────
+
+@router.get("/demo/scenarios")
+async def list_scenarios(_agent: Agent = Depends(get_current_agent)):
+    """Legacy canned scenarios endpoint returning empty list."""
+    return []
+
+
+@router.post("/demo/run")
+async def run_scenario_deprecated():
+    """Legacy canned scenario runner deprecated."""
+    raise HTTPException(
+        status_code=410,
+        detail="Canned replay scenarios are deprecated. Use /demo/agent/run with a natural prompt.",
+    )
+
 
