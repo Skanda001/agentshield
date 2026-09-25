@@ -7,9 +7,11 @@ import type { DemoEvent, ApprovalDecisionResult } from "@/lib/demoApi";
 export default function DemoEventDetail({
   event,
   onApprovalDecided,
+  prompt,
 }: {
   event: DemoEvent | null;
   onApprovalDecided?: (res: ApprovalDecisionResult) => void;
+  prompt?: string;
 }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<"approved" | "denied" | null>(null);
@@ -35,7 +37,13 @@ export default function DemoEventDetail({
     setBusy(true);
     setErr(null);
     try {
-      const res = await decideApproval(event.approval_id, approved, "demo-supervisor");
+      const res = await decideApproval(
+        event.approval_id,
+        approved,
+        "demo-supervisor",
+        undefined,
+        prompt
+      );
       setDone(approved ? "approved" : "denied");
       if (res.output) {
         setRevealedData(res.output);

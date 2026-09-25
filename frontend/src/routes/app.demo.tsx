@@ -365,6 +365,7 @@ function DemoPage() {
           <DemoEventDetail
             event={selectedEvent}
             onApprovalDecided={handleApprovalDecided}
+            prompt={prompt}
           />
         </div>
       </div>

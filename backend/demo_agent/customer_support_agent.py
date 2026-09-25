@@ -194,6 +194,7 @@ async def _create_approval_for_hitl(
     run_id: str,
     risk: int,
     reasons: list[str],
+    prompt: str = "",
 ) -> Optional[str]:
     """Create an Approval row in the database so the user can click Approve / Deny in the UI."""
     try:
@@ -249,6 +250,7 @@ async def _create_approval_for_hitl(
                     "run_id": run_id,
                     "reasons": reasons,
                     "tool": tool,
+                    "prompt": prompt,
                 },
                 expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
             )
@@ -273,6 +275,7 @@ async def _call_tool_through_shield(
     run_id: str,
     step: int,
     emit: EventCallback,
+    prompt: str = "",
 ) -> dict[str, Any]:
     """Execute a tool through @protect, capturing verdicts, findings, and reasons."""
     fn = TOOLS.get(tool)
@@ -299,6 +302,7 @@ async def _call_tool_through_shield(
             run_id=run_id,
             risk=e.risk,
             reasons=e.reasons,
+            prompt=prompt,
         )
         findings = _collect_findings(tool, args, e.risk, e.reasons)
         reason_text = format_security_reason("HITL", tool, e.risk, e.reasons, findings)
@@ -423,6 +427,7 @@ def build_langchain_tools(
     run_id: str,
     step_counter: dict[str, int],
     emit: EventCallback,
+    prompt: str = "",
 ) -> list[Any]:
     """Construct LangChain StructuredTools with explicit Pydantic schemas."""
     from langchain_core.tools import StructuredTool
@@ -431,6 +436,7 @@ def build_langchain_tools(
         res = await _call_tool_through_shield(
             tool="search_customer", args={"email": email},
             run_id=run_id, step=_inc_step(step_counter), emit=emit,
+            prompt=prompt,
         )
         return json.dumps(res.get("result", res), default=str)
 
@@ -438,6 +444,7 @@ def build_langchain_tools(
         res = await _call_tool_through_shield(
             tool="get_customer", args={"customer_id": int(customer_id)},
             run_id=run_id, step=_inc_step(step_counter), emit=emit,
+            prompt=prompt,
         )
         if not res.get("ok"):
             return f"AGENTSHIELD_{res.get('verdict')}: {res.get('reason')}"
@@ -555,21 +562,23 @@ def build_langchain_tools(
 
 SYSTEM_PROMPT = """You are an intelligent, capable Customer Support Specialist for an e-commerce platform protected by AgentShield Security Gateway.
 
-YOUR RESPONSIBILITIES:
-1. Carefully analyze the user's prompt to determine what customer support action is required.
-2. Select and call the appropriate database tools immediately with the correct parameters (search_customer, get_customer_orders, get_customer, search_emails, issue_refund, send_email, delete_customer).
-3. If looking for a customer by email, call search_customer first to discover their customer_id.
-4. If checking orders, payments, or emails, use the numeric customer_id obtained or mentioned.
-5. If the user explicitly asks to delete an account, call delete_customer so AgentShield can inspect and enforce governance policies.
+YOUR PRIMARY DIRECTIVE:
+You MUST ALWAYS invoke the relevant tool to execute the requested action. Never refuse in text or claim you cannot provide information.
+- If the user asks for customer identity, Aadhaar, PAN, phone, or profile, you MUST invoke get_customer(customer_id=...).
+- If the user asks for customer orders or shipping status, you MUST invoke get_customer_orders(customer_id=...).
+- If the user asks for support emails or tickets, you MUST invoke search_emails(customer_id=...).
+- If the user asks for payments, you MUST invoke get_payment_history(customer_id=...).
+- If the user asks for a refund, you MUST invoke issue_refund(...).
+- If the user asks to send an email, you MUST invoke send_email(...).
+- If the user asks to delete an account, you MUST invoke delete_customer(customer_id=...).
 
-SECURITY GOVERNANCE (AgentShield):
-Every single tool you call is intercepted in real time by AgentShield.
-- ALLOW: The tool succeeds and returns real database data. Proceed with your workflow.
-- HITL (Escalated): The action touches restricted sensitive PII (Aadhaar, PAN). It is paused for human supervisor sign-off. Inform the user that the request was escalated for compliance approval.
-- BLOCK (Denied): The action was prohibited due to policy violation (e.g. destructive customer deletion, prompt injection, data exfiltration to unauthorized external recipient).
-  CRITICAL: Do NOT attempt to re-call or circumvent a BLOCKED tool. In your final answer, explain clearly to the user which action was blocked and the exact security reason why it was refused.
+SECURITY GOVERNANCE (AgentShield Gateway):
+AgentShield intercepts every tool call you make in real time:
+- ALLOW: The tool succeeds and returns real database data. Summarize the results for the user.
+- HITL (Escalated): Sensitive statutory PII (Aadhaar, PAN) is paused for human supervisor sign-off. Explain that the action has been submitted for supervisor approval.
+- BLOCK (Denied): Dangerous actions (account deletion, data exfiltration) are blocked. Explain the exact security reason why the gateway prohibited the action.
 
-Be concise, helpful, and maintain rigorous security awareness at all times.
+CRITICAL: Do NOT refuse or self-censor. Always call the tool so AgentShield can inspect, audit, and govern the action.
 """
 
 
@@ -620,18 +629,22 @@ async def _heuristic_fallback_agent(
         )
 
     # 3. Check for restricted PII request (get_customer)
-    if any(k in prompt_lower for k in ["pan", "aadhaar", "pii", "profile", "identity", "phone"]) and "customer" in prompt_lower:
+    if any(k in prompt_lower for k in ["pan", "aadhaar", "adhar", "aadhar", "uidai", "pii", "profile", "identity", "phone"]):
         match = re.search(r"\b(\d{4})\b", prompt)
-        cid = int(match.group(1)) if match else 1042
+        cid = int(match.group(1)) if match else 1008
         step = _inc_step(step_counter)
         res = await _call_tool_through_shield(
             tool="get_customer",
             args={"customer_id": cid},
             run_id=run_id, step=step, emit=emit,
+            prompt=prompt,
         )
+        is_only_aadhaar = any(k in prompt_lower for k in ["aadhaar", "adhar", "aadhar", "uidai"]) and not any(k in prompt_lower for k in ["pan", "all", "complete", "full"])
+        is_only_pan = "pan" in prompt_lower and not any(k in prompt_lower for k in ["aadhaar", "adhar", "aadhar", "all", "complete", "full"])
+        target_field = "Aadhaar number" if is_only_aadhaar else "PAN card" if is_only_pan else "customer identity profile"
         return (
-            f"I requested the full customer profile for customer {cid}. Because this profile contains "
-            f"restricted statutory PII (Aadhaar / PAN), AgentShield flagged this action as ESCALATE (HITL). "
+            f"I requested the {target_field} for customer {cid}. Because accessing statutory Indian identity records "
+            f"is restricted, AgentShield flagged this action as ESCALATE (HITL). "
             f"A human supervisor must review and approve Approval #{res.get('approval_id', 'pending')} before data disclosure."
         )
 
@@ -713,7 +726,7 @@ async def run_customer_support_agent(
             )
             from langchain_groq import ChatGroq
 
-            tools = build_langchain_tools(run_id, step_counter, _capture)
+            tools = build_langchain_tools(run_id, step_counter, _capture, prompt=prompt)
             tool_map = {t.name: t for t in tools}
 
             llm = ChatGroq(model=model, temperature=0, api_key=groq_key)

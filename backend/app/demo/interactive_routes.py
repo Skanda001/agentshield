@@ -181,22 +181,112 @@ async def run_agent_prompt(
 # Human-in-the-Loop (HITL) Execution & Decision Handlers
 # ─────────────────────────────────────────────────────────────
 
-def format_approved_output(tool: str, args: dict[str, Any], output: dict[str, Any]) -> str:
-    """Format authorized tool output into a clean, markdown representation for the user."""
+def format_approved_output(
+    tool: str,
+    args: dict[str, Any],
+    output: dict[str, Any],
+    prompt: str = "",
+) -> tuple[str, dict[str, Any]]:
+    """Format authorized tool output and enforce least-privilege data minimization based on the user's prompt."""
     if tool == "get_customer":
         if not output.get("found"):
-            return f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\nNo customer record found matching ID `{args.get('customer_id')}`."
+            return (
+                f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\nNo customer record found matching ID `{args.get('customer_id')}`.",
+                output,
+            )
+
         name = output.get("name", "N/A")
         email = output.get("email", "N/A")
         phone = output.get("phone", "N/A")
         address = output.get("address", "N/A")
-        aadhaar = output.get("aadhaar", "N/A")
-        pan = output.get("pan", "N/A")
+        aadhaar = output.get("aadhaar") or "Not on file"
+        pan = output.get("pan") or "Not on file"
         status = output.get("account_status", "Active")
         vip = "Yes (VIP)" if output.get("is_vip") else "Standard"
         cid = output.get("display_id", args.get("customer_id"))
 
-        return (
+        p_lower = prompt.lower().strip()
+        wants_aadhaar = any(w in p_lower for w in ["aadhaar", "adhar", "uidai", "aadhar"])
+        wants_pan = "pan" in p_lower
+        wants_phone = any(w in p_lower for w in ["phone", "mobile", "contact"])
+        wants_address = any(w in p_lower for w in ["address", "location", "residence"])
+
+        # 1. User specifically asked for Aadhaar only
+        if wants_aadhaar and not wants_pan and not wants_phone and not wants_address:
+            filtered_output = {
+                "found": True,
+                "display_id": cid,
+                "name": name,
+                "aadhaar": aadhaar,
+            }
+            text = (
+                f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\n"
+                f"### Authorized Customer Identity (Customer #{cid})\n\n"
+                f"| Identity Field | Value |\n"
+                f"| :--- | :--- |\n"
+                f"| **Full Name** | {name} |\n"
+                f"| **Aadhaar Number (UIDAI)** | `{aadhaar}` |\n\n"
+                f"> *Security & Privacy Guardrail (Least Privilege & Data Minimization): "
+                f"Disclosing only the requested statutory Aadhaar identifier. "
+                f"Unrequested customer profile fields (Phone, Address, PAN Card) remain restricted and masked.*"
+            )
+            return text, filtered_output
+
+        # 2. User specifically asked for PAN only
+        if wants_pan and not wants_aadhaar and not wants_phone and not wants_address:
+            filtered_output = {
+                "found": True,
+                "display_id": cid,
+                "name": name,
+                "pan": pan,
+            }
+            text = (
+                f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\n"
+                f"### Authorized Customer Identity (Customer #{cid})\n\n"
+                f"| Identity Field | Value |\n"
+                f"| :--- | :--- |\n"
+                f"| **Full Name** | {name} |\n"
+                f"| **PAN Card (Income Tax)** | `{pan}` |\n\n"
+                f"> *Security & Privacy Guardrail (Least Privilege & Data Minimization): "
+                f"Disclosing only the requested statutory PAN identifier. "
+                f"Unrequested customer profile fields (Phone, Address, Aadhaar) remain restricted and masked.*"
+            )
+            return text, filtered_output
+
+        # 3. User specifically asked for Phone only
+        if wants_phone and not wants_aadhaar and not wants_pan and not wants_address:
+            filtered_output = {
+                "found": True,
+                "display_id": cid,
+                "name": name,
+                "phone": phone,
+            }
+            text = (
+                f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\n"
+                f"### Authorized Customer Contact (Customer #{cid})\n\n"
+                f"| Contact Field | Value |\n"
+                f"| :--- | :--- |\n"
+                f"| **Full Name** | {name} |\n"
+                f"| **Phone Number** | {phone} |\n\n"
+                f"> *Security & Privacy Guardrail (Least Privilege): Disclosing only the requested contact phone number. "
+                f"Statutory identity numbers (Aadhaar, PAN) remain restricted.*"
+            )
+            return text, filtered_output
+
+        # 4. Full profile or multiple fields requested
+        filtered_output = {
+            "found": True,
+            "display_id": cid,
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "address": address,
+            "aadhaar": aadhaar,
+            "pan": pan,
+            "account_status": status,
+            "is_vip": output.get("is_vip", False),
+        }
+        text = (
             f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\n"
             f"### Authorized Customer Profile Details (Customer #{cid})\n\n"
             f"| Identity Field | Value |\n"
@@ -210,18 +300,24 @@ def format_approved_output(tool: str, args: dict[str, Any], output: dict[str, An
             f"| **Account Status** | {status.title()} ({vip}) |\n\n"
             f"> *Supervisor Note: Restricted statutory Indian PII (Aadhaar & PAN) has been released under explicit supervisor authorization and recorded in the audit trail.*"
         )
+        return text, filtered_output
+
     elif tool == "search_emails":
         emails = output.get("emails", [])
         cid = args.get("customer_id", "Unknown")
         if not emails:
-            return f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\nNo emails found for customer #{cid}."
+            return (
+                f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\nNo emails found for customer #{cid}.",
+                output,
+            )
         lines = [
             f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n",
             f"### Authorized Confidential Correspondence (Customer #{cid})\n",
         ]
         for idx, em in enumerate(emails[:5], 1):
             lines.append(f"**Email #{idx}** | **From:** {em.get('sender')} | **Subject:** {em.get('subject')} | **Date:** {em.get('received_at')}\n> {em.get('body')}\n")
-        return "\n".join(lines)
+        return "\n".join(lines), output
+
     elif tool == "get_payment_history":
         payments = output.get("payments", [])
         cid = args.get("customer_id", "Unknown")
@@ -231,12 +327,14 @@ def format_approved_output(tool: str, args: dict[str, Any], output: dict[str, An
         ]
         for p in payments:
             lines.append(f"- **Amount:** ${p.get('amount'):.2f} | **Status:** {p.get('status')} | **Method:** {p.get('method')} | **Date:** {p.get('created_at')}")
-        return "\n".join(lines)
+        return "\n".join(lines), output
+
     else:
         return (
             f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\n"
             f"Tool `{tool}` executed successfully with arguments `{args}`:\n\n"
-            f"```json\n{json.dumps(output, indent=2, default=str)}\n```"
+            f"```json\n{json.dumps(output, indent=2, default=str)}\n```",
+            output,
         )
 
 
@@ -254,6 +352,7 @@ class DecideApprovalRequest(BaseModel):
     approved: bool
     decided_by: str = "supervisor"
     note: str | None = None
+    prompt: str | None = None
 
 
 class DecideApprovalResponse(BaseModel):
@@ -309,6 +408,7 @@ async def decide_approval_endpoint(
     req_ctx = approval.request_context or {}
     args = req_ctx.get("args") or req_ctx.get("arguments") or {}
     run_id = req_ctx.get("run_id") or str(approval.decision_id)
+    user_prompt = payload.prompt or req_ctx.get("prompt") or ""
 
     if payload.approved:
         fn = TOOLS.get(tool_name)
@@ -321,7 +421,7 @@ async def decide_approval_endpoint(
                 logger.exception("Error executing approved tool %s: %s", tool_name, e)
                 tool_output = {"error": str(e), "found": False}
 
-        agent_response = format_approved_output(tool_name, args, tool_output)
+        agent_response, filtered_output = format_approved_output(tool_name, args, tool_output, prompt=user_prompt)
 
         updated_event = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -338,7 +438,7 @@ async def decide_approval_endpoint(
             "audit_id": str(approval.decision_id),
             "audit_seq": None,
             "approval_id": str(approval.id),
-            "output": tool_output,
+            "output": filtered_output,
             "error": None,
             "text": agent_response,
         }
@@ -351,7 +451,7 @@ async def decide_approval_endpoint(
             status="approved",
             executed=True,
             tool=tool_name,
-            output=tool_output,
+            output=filtered_output,
             agent_response=agent_response,
             updated_event=updated_event,
         )

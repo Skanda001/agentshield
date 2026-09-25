@@ -65,13 +65,15 @@ export async function decideApproval(
   approvalId: string,
   approved: boolean,
   decidedBy: string,
-  note?: string
+  note?: string,
+  prompt?: string
 ): Promise<ApprovalDecisionResult> {
   const r = await api.post("/demo/approvals/decide", {
     approval_id: approvalId,
     approved,
     decided_by: decidedBy,
     note,
+    prompt,
   });
   return r.data;
 }
