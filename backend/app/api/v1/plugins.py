@@ -412,6 +412,7 @@ async def plug_out_agent(
 @router.post("/plugins/run", response_model=PluginRunResponse)
 async def run_plugin_agent(
     payload: PluginRunRequest,
+    db: AsyncSession = Depends(get_db),
     _current_agent: Optional[Agent] = Depends(get_optional_agent),
 ):
     """Execute a plugged-in agent against a prompt with live event streaming."""
@@ -433,6 +434,41 @@ async def run_plugin_agent(
             status_code=500,
             detail=f"Plugged agent '{payload.agent_id}' missing entrypoint 'agent.py'.",
         )
+
+    # Refresh shield.py in mounted directory to ensure latest gateway resolution
+    sdk_src = EXTERNAL_AGENTS_DIR / "shield.py"
+    if sdk_src.exists():
+        try:
+            shutil.copy2(sdk_src, target_dir / "shield.py")
+        except Exception:
+            pass
+
+    # Resolve internal gateway URL & issue valid agent token
+    port = os.getenv("PORT", "8000" if sys.platform != "win32" else "8002")
+    gateway_url = os.getenv("AGENTSHIELD_URL") or f"http://127.0.0.1:{port}"
+    os.environ["AGENTSHIELD_URL"] = gateway_url
+
+    agent_token = None
+    try:
+        res = await db.execute(
+            select(Agent).where(
+                Agent.name.ilike(f"%{payload.agent_id.replace('-', ' ')}%")
+            )
+        )
+        db_agent = res.scalar_one_or_none()
+        if not db_agent:
+            res = await db.execute(select(Agent).where(Agent.is_active.is_(True)).limit(1))
+            db_agent = res.scalar_one_or_none()
+
+        if db_agent:
+            agent_token = create_agent_token(
+                agent_id=str(db_agent.id),
+                tenant_id=str(db_agent.tenant_id),
+                scopes=db_agent.scopes or ["read:customer", "read:order", "write:transfer"],
+            )
+            os.environ["AGENTSHIELD_TOKEN"] = agent_token
+    except Exception as ex:
+        logger.warning("Could not issue agent token in run_plugin_agent: %s", ex)
 
     run_id = payload.run_id or str(uuid.uuid4())
     collected_events: list[dict[str, Any]] = []
@@ -471,6 +507,13 @@ async def run_plugin_agent(
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
+        # Update any imported shield module clients
+        for mod_name, mod in list(sys.modules.items()):
+            if "shield" in mod_name and hasattr(mod, "_default_client"):
+                mod._default_client.base_url = gateway_url
+                if agent_token:
+                    mod._default_client.token = agent_token
+
         # Identify agent class
         agent_cls = None
         for attr in dir(module):
@@ -483,6 +526,10 @@ async def run_plugin_agent(
             raise RuntimeError(f"No agent class with run() method found in {entrypoint}")
 
         agent_instance = agent_cls()
+        if hasattr(agent_instance, "client") and agent_instance.client:
+            agent_instance.client.base_url = gateway_url
+            if agent_token:
+                agent_instance.client.token = agent_token
 
         # Run synchronously or in thread pool to prevent blocking asyncio loop
         run_res = await asyncio.to_thread(

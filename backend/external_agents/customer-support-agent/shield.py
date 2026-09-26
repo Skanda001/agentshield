@@ -18,8 +18,13 @@ from typing import Any, Callable, Optional
 
 logger = logging.getLogger("shield.sdk")
 
-# Configuration defaults
-DEFAULT_GATEWAY_URL = os.getenv("AGENTSHIELD_URL", "http://127.0.0.1:8002")
+def _get_default_gateway_url() -> str:
+    if url := os.getenv("AGENTSHIELD_URL"):
+        return url.rstrip("/")
+    port = os.getenv("PORT", "8000" if sys.platform != "win32" else "8002")
+    return f"http://127.0.0.1:{port}"
+
+DEFAULT_GATEWAY_URL = _get_default_gateway_url()
 DEFAULT_API_KEY = os.getenv("AGENTSHIELD_API_KEY", "ash_wa9sPIWTOIkZFyCMvxXtuir_qBtrMPIRTzuwsxB8xxg")
 
 
@@ -64,14 +69,26 @@ class ShieldClient:
         api_key: Optional[str] = None,
         token: Optional[str] = None,
     ) -> None:
-        self.base_url = (base_url or DEFAULT_GATEWAY_URL).rstrip("/")
+        self._base_url = base_url
         self.api_key = api_key or DEFAULT_API_KEY
         self.token = token or os.getenv("AGENTSHIELD_TOKEN")
 
+    @property
+    def base_url(self) -> str:
+        if self._base_url:
+            return self._base_url.rstrip("/")
+        return _get_default_gateway_url()
+
+    @base_url.setter
+    def base_url(self, value: Optional[str]) -> None:
+        self._base_url = value
+
     def _ensure_token(self) -> str:
         """Obtain a valid JWT if not already cached."""
-        if self.token:
-            return self.token
+        token = self.token or os.getenv("AGENTSHIELD_TOKEN")
+        if token:
+            self.token = token
+            return token
 
         url = f"{self.base_url}/api/v1/agents/token"
         req_data = json.dumps({"api_key": self.api_key}).encode("utf-8")
