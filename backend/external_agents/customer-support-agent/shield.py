@@ -68,10 +68,13 @@ class ShieldClient:
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         token: Optional[str] = None,
+        direct_handler: Optional[Callable[..., dict[str, Any]]] = None,
     ) -> None:
         self._base_url = base_url
         self.api_key = api_key or DEFAULT_API_KEY
         self.token = token or os.getenv("AGENTSHIELD_TOKEN")
+        self.direct_handler = direct_handler
+        self.direct_approval_handler: Optional[Callable[..., dict[str, Any]]] = None
 
     @property
     def base_url(self) -> str:
@@ -116,6 +119,20 @@ class ShieldClient:
         data_classification: Optional[str] = "internal",
     ) -> dict[str, Any]:
         """Send a tool execution intent to /api/v1/decide and get the gateway verdict."""
+        # 1. Direct in-process execution (used when agent is plugged inside AgentShield backend)
+        if self.direct_handler:
+            try:
+                return self.direct_handler(
+                    tool=tool,
+                    arguments=arguments,
+                    resource_type=resource_type,
+                    data_classification=data_classification,
+                )
+            except Exception as e:
+                logger.error("Error in direct handler: %s", e)
+                raise ShieldError(f"Error evaluating security decision: {e}")
+
+        # 2. HTTP gateway network request (used when agent is standalone external client)
         token = self._ensure_token()
         url = f"{self.base_url}/api/v1/decide"
         payload = {
@@ -163,6 +180,18 @@ class ShieldClient:
         note: Optional[str] = None,
     ) -> dict[str, Any]:
         """Approve or deny an escalated HITL approval."""
+        if self.direct_approval_handler:
+            try:
+                return self.direct_approval_handler(
+                    approval_id=approval_id,
+                    approved=approved,
+                    decided_by=decided_by,
+                    note=note,
+                )
+            except Exception as e:
+                logger.error("Error in direct approval handler: %s", e)
+                raise ShieldError(f"Error evaluating approval decision: {e}")
+
         token = self._ensure_token()
         url = f"{self.base_url}/api/v1/approvals/{approval_id}/decide"
         payload = {

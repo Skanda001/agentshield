@@ -294,8 +294,9 @@ async def plug_in_agent(
             Agent.tenant_id == tenant_id,
             Agent.name == info.name,
         )
+        .order_by(Agent.created_at.desc())
     )
-    db_agent = res.scalar_one_or_none()
+    db_agent = res.scalars().first()
 
     if db_agent:
         db_agent.status = "active"
@@ -380,11 +381,11 @@ async def plug_out_agent(
 
     # Deactivate in database
     tenant_id = current_agent.tenant_id if current_agent else None
-    query = select(Agent).where(Agent.name == info.name)
+    query = select(Agent).where(Agent.name == info.name).order_by(Agent.created_at.desc())
     if tenant_id:
         query = query.where(Agent.tenant_id == tenant_id)
     res = await db.execute(query)
-    db_agent = res.scalar_one_or_none()
+    db_agent = res.scalars().first()
     if db_agent:
         db_agent.status = "unplugged"
         db_agent.is_active = False
@@ -456,16 +457,48 @@ async def run_plugin_agent(
     os.environ["AGENTSHIELD_URL"] = gateway_url
 
     agent_token = None
+    db_agent: Optional[Agent] = None
     try:
         res = await db.execute(
-            select(Agent).where(
-                Agent.name.ilike(f"%{payload.agent_id.replace('-', ' ')}%")
-            )
+            select(Agent)
+            .where(Agent.name.ilike(f"%{payload.agent_id.replace('-', ' ')}%"))
+            .order_by(Agent.is_active.desc(), Agent.created_at.desc())
         )
-        db_agent = res.scalar_one_or_none()
+        db_agent = res.scalars().first()
         if not db_agent:
-            res = await db.execute(select(Agent).where(Agent.is_active.is_(True)).limit(1))
-            db_agent = res.scalar_one_or_none()
+            res = await db.execute(
+                select(Agent)
+                .where(Agent.is_active.is_(True))
+                .order_by(Agent.created_at.desc())
+            )
+            db_agent = res.scalars().first()
+
+        if not db_agent:
+            # Auto-provision tenant & agent record if completely clean database
+            tenant_res = await db.execute(select(Tenant.id).limit(1))
+            tenant_id = tenant_res.scalar_one_or_none()
+            if not tenant_id:
+                new_tenant = Tenant(name="Default Tenant", slug="default-tenant")
+                db.add(new_tenant)
+                await db.commit()
+                await db.refresh(new_tenant)
+                tenant_id = new_tenant.id
+
+            raw_key = generate_api_key()
+            info = _get_agent_info(target_dir, is_plugged_in=True)
+            db_agent = Agent(
+                tenant_id=tenant_id,
+                name=info.name,
+                description=info.description,
+                api_key_hash=hash_api_key(raw_key),
+                scopes=info.scopes or ["read:customer", "read:order", "write:transfer"],
+                role="support",
+                status="active",
+                is_active=True,
+            )
+            db.add(db_agent)
+            await db.commit()
+            await db.refresh(db_agent)
 
         if db_agent:
             agent_token = create_agent_token(
@@ -484,6 +517,7 @@ async def run_plugin_agent(
     except Exception as ex:
         logger.warning("Could not issue agent token in run_plugin_agent: %s", ex)
 
+    agent_db_id = db_agent.id if db_agent else None
     run_id = payload.run_id or str(uuid.uuid4())
     collected_events: list[dict[str, Any]] = []
 
@@ -521,12 +555,100 @@ async def run_plugin_agent(
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        # Update any imported shield module clients
+        # In-process gateway execution handlers (eliminates loopback network hops & container timeouts)
+        loop = asyncio.get_running_loop()
+
+        def in_process_decide(
+            tool: str,
+            arguments: dict[str, Any],
+            resource_type: Optional[str] = None,
+            data_classification: Optional[str] = "internal",
+        ) -> dict[str, Any]:
+            async def _async_decide():
+                from app.db.session import AsyncSessionLocal
+                from app.gateway import decision_pipeline
+                from app.gateway.tool_adapter import ToolCall
+
+                async with AsyncSessionLocal() as session:
+                    target_agent = None
+                    if agent_db_id:
+                        target_agent = await session.get(Agent, agent_db_id)
+                    if not target_agent:
+                        stmt = select(Agent).where(Agent.is_active.is_(True)).limit(1)
+                        res_ag = await session.execute(stmt)
+                        target_agent = res_ag.scalar_one_or_none()
+
+                    if not target_agent:
+                        raise RuntimeError("No active agent registered in gateway for decision evaluation.")
+
+                    call = ToolCall(tool=tool, arguments=arguments, resource_type=resource_type)
+                    res_pipe = await decision_pipeline.run(
+                        session,
+                        agent=target_agent,
+                        call=call,
+                        data_classification=data_classification,
+                    )
+                    resp = res_pipe.response
+                    verdict_str = resp.verdict.value if hasattr(resp.verdict, "value") else str(resp.verdict)
+
+                    return {
+                        "decision_id": str(resp.decision_id),
+                        "verdict": verdict_str,
+                        "risk_score": float(resp.risk_score),
+                        "reasons": list(resp.reasons) if resp.reasons else [],
+                        "approval_id": str(resp.approval_id) if resp.approval_id else None,
+                    }
+
+            future = asyncio.run_coroutine_threadsafe(_async_decide(), loop)
+            return future.result(timeout=15)
+
+        def in_process_approval_decide(
+            approval_id: str,
+            approved: bool = True,
+            decided_by: str = "supervisor",
+            note: Optional[str] = None,
+        ) -> dict[str, Any]:
+            async def _async_approval():
+                from app.db.session import AsyncSessionLocal
+                from app.services import approval_service
+
+                async with AsyncSessionLocal() as session:
+                    app_uuid = UUID(approval_id) if isinstance(approval_id, str) else approval_id
+                    app_record = await approval_service.get_approval(session, app_uuid)
+                    if not app_record:
+                        raise ValueError(f"Approval {approval_id} not found")
+                    updated = await approval_service.decide(
+                        session,
+                        approval=app_record,
+                        approved=approved,
+                        decided_by=decided_by,
+                        note=note or ("Approved by supervisor via in-process handler" if approved else "Denied by supervisor"),
+                    )
+                    return {
+                        "approval_id": str(updated.id),
+                        "status": updated.status,
+                        "decided_by": updated.decided_by,
+                    }
+
+            future = asyncio.run_coroutine_threadsafe(_async_approval(), loop)
+            return future.result(timeout=15)
+
+        # Wire handlers into all shield instances in sys.modules, module, tools, and agent_instance
         for mod_name, mod in list(sys.modules.items()):
             if "shield" in mod_name and hasattr(mod, "_default_client"):
+                mod._default_client.direct_handler = in_process_decide
+                mod._default_client.direct_approval_handler = in_process_approval_decide
                 mod._default_client.base_url = gateway_url
                 if agent_token:
                     mod._default_client.token = agent_token
+
+        if hasattr(module, "_default_client"):
+            module._default_client.direct_handler = in_process_decide
+            module._default_client.direct_approval_handler = in_process_approval_decide
+
+        if hasattr(module, "tools") and hasattr(module.tools, "_default_client"):
+            module.tools._default_client.direct_handler = in_process_decide
+            module.tools._default_client.direct_approval_handler = in_process_approval_decide
 
         # Identify agent class
         agent_cls = None
@@ -541,6 +663,8 @@ async def run_plugin_agent(
 
         agent_instance = agent_cls()
         if hasattr(agent_instance, "client") and agent_instance.client:
+            agent_instance.client.direct_handler = in_process_decide
+            agent_instance.client.direct_approval_handler = in_process_approval_decide
             agent_instance.client.base_url = gateway_url
             if agent_token:
                 agent_instance.client.token = agent_token

@@ -1,6 +1,9 @@
-"""Launcher for AgentShield backend on Windows with SelectorEventLoop."""
 import asyncio
 import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
