@@ -17,6 +17,7 @@ ACTION_RISK = {
     "read": 0, "list": 0,
     "write": 20, "update": 20, "create": 15,
     "send": 25, "delete": 40, "drop": 50, "admin": 35,
+    "transfer": 35, "wire": 60, "refund": 20, "execute": 25,
 }
 
 RESOURCE_SENSITIVITY = {
@@ -50,7 +51,7 @@ PII_EXTERNAL_BONUS = {
 
 def infer_action(tool: str) -> str:
     name = tool.lower()
-    for verb in ("delete", "drop", "send", "create", "update", "write", "list", "read", "admin"):
+    for verb in ("delete", "drop", "wire", "transfer", "refund", "send", "create", "update", "write", "execute", "list", "read", "admin"):
         if verb in name:
             return verb
     return "read"
@@ -64,6 +65,8 @@ def infer_resource_type(tool: str, explicit: Optional[str]) -> str:
                      "credential", "audit", "email"):
         if resource in name:
             return resource
+    if any(k in name for k in ("transfer", "fund", "balance", "bank", "account", "wire", "refund")):
+        return "payment"
     return "public"
 
 

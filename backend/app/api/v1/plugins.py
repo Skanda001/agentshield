@@ -318,6 +318,13 @@ async def plug_in_agent(
     await db.commit()
     await db.refresh(db_agent)
 
+    # Ensure active enterprise security policy exists for this tenant
+    try:
+        from app.services.policy_service import ensure_default_policy
+        await ensure_default_policy(db, tenant_id)
+    except Exception as ep:
+        logger.warning("Could not auto-seed policy in plug_in_agent: %s", ep)
+
     # Issue active token
     agent_token = create_agent_token(
         agent_id=str(db_agent.id),
@@ -467,6 +474,13 @@ async def run_plugin_agent(
                 scopes=db_agent.scopes or ["read:customer", "read:order", "write:transfer"],
             )
             os.environ["AGENTSHIELD_TOKEN"] = agent_token
+
+            # Ensure active enterprise security policy exists for this tenant
+            try:
+                from app.services.policy_service import ensure_default_policy
+                await ensure_default_policy(db, db_agent.tenant_id)
+            except Exception as ep:
+                logger.warning("Could not auto-seed policy in run_plugin_agent: %s", ep)
     except Exception as ex:
         logger.warning("Could not issue agent token in run_plugin_agent: %s", ex)
 

@@ -60,21 +60,112 @@ async def list_policies(db: AsyncSession, tenant_id: UUID) -> list[Policy]:
     return list(result.scalars().all())
 
 
+DEFAULT_POLICY_DICT = {
+    "name": "enterprise_guardrail_policy",
+    "version": 1,
+    "description": "Enterprise security guardrail policy for AgentShield",
+    "rules": [
+        {"name": "allow_order_read", "effect": "allow", "action": "read", "resource": "order", "priority": 10},
+        {"name": "allow_customer_read", "effect": "allow", "action": "read", "resource": "customer", "priority": 10},
+        {"name": "allow_account_balance", "effect": "allow", "action": "read", "resource": "payment", "priority": 10},
+        {"name": "escalate_restricted_customer", "effect": "escalate", "action": "read", "resource": "customer", "conditions": {"data_classification": "restricted"}, "priority": 50},
+        {"name": "escalate_restricted_payment", "effect": "escalate", "resource": "payment", "conditions": {"data_classification": "restricted"}, "priority": 70},
+        {"name": "escalate_fund_transfer", "effect": "escalate", "action": "transfer", "resource": "payment", "priority": 80},
+        {"name": "deny_customer_delete", "effect": "deny", "action": "delete", "resource": "customer", "priority": 100},
+        {"name": "deny_offshore_wire", "effect": "deny", "action": "wire", "resource": "payment", "priority": 100},
+        {"name": "default_escalate", "effect": "escalate", "priority": 1},
+    ]
+}
+
+
+async def ensure_default_policy(db: AsyncSession, tenant_id: UUID) -> Policy:
+    """Ensure an active enterprise security policy exists for this tenant, creating or upgrading as needed."""
+    from pathlib import Path
+    from app.policy_engine.dsl import load_and_validate
+
+    document: Optional[PolicyDocument] = None
+    candidates = [
+        Path("/app/policies/demo.yaml"),
+        Path(__file__).resolve().parent.parent.parent / "policies" / "demo.yaml",
+        Path.cwd() / "policies" / "demo.yaml",
+        Path("./policies/demo.yaml").resolve(),
+    ]
+    for c in candidates:
+        try:
+            if c.exists():
+                document = load_and_validate(c)
+                break
+        except Exception:
+            continue
+
+    if not document:
+        document = PolicyDocument.model_validate(DEFAULT_POLICY_DICT)
+
+    # Check if a policy already exists for this tenant
+    existing = await db.execute(
+        select(Policy)
+        .where(Policy.tenant_id == tenant_id)
+        .order_by(Policy.created_at.desc())
+        .limit(1)
+    )
+    p = existing.scalar_one_or_none()
+
+    if p:
+        p.is_active = True
+        # Check if the policy has current rules containing escalate_fund_transfer
+        curr_doc = await get_current_document(db, p)
+        rule_names = [r.name for r in curr_doc.rules] if curr_doc else []
+        if "escalate_fund_transfer" not in rule_names:
+            await create_policy_version(db, policy=p, document=document)
+        else:
+            await db.commit()
+            await db.refresh(p)
+        return p
+
+    # Create new policy
+    new_policy = Policy(
+        tenant_id=tenant_id,
+        name=document.name,
+        description=document.description,
+        current_version=0,
+        is_active=True,
+    )
+    db.add(new_policy)
+    await db.commit()
+    await db.refresh(new_policy)
+
+    await create_policy_version(db, policy=new_policy, document=document)
+    await db.refresh(new_policy)
+    return new_policy
+
+
 async def find_active_policy_for_tenant(
     db: AsyncSession, tenant_id: UUID
 ) -> Optional[Policy]:
-    """Return the (single) active policy for a tenant, or None.
-
-    Tier 1 simplification: one active policy per tenant.
-    Later, this becomes a set with routing rules.
-    """
+    """Return the active policy for a tenant, automatically ensuring default security rules if missing."""
     result = await db.execute(
         select(Policy)
         .where(Policy.tenant_id == tenant_id, Policy.is_active == True)  # noqa: E712
         .order_by(Policy.created_at.desc())
         .limit(1)
     )
-    return result.scalar_one_or_none()
+    pol = result.scalar_one_or_none()
+    if pol:
+        # Check if current version has up-to-date rules
+        curr_doc = await get_current_document(db, pol)
+        rule_names = [r.name for r in curr_doc.rules] if curr_doc else []
+        if "escalate_fund_transfer" not in rule_names:
+            try:
+                return await ensure_default_policy(db, tenant_id)
+            except Exception:
+                pass
+        return pol
+
+    # Auto-seed the policy for this tenant
+    try:
+        return await ensure_default_policy(db, tenant_id)
+    except Exception:
+        return None
 
 
 async def get_current_document(
