@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
     SUPABASE_TABLE: str = "agentshield_call_logs"
 
+    # Groq LLM
+    GROQ_API_KEY: str = ""
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
