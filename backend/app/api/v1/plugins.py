@@ -37,15 +37,25 @@ logger = logging.getLogger("agentshield.plugins")
 router = APIRouter(tags=["plugins"])
 
 # Resolution of paths
+# Resolution of paths
 # backend/app/api/v1/plugins.py -> backend root -> agentshield root
 AGENTSHIELD_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 PLUGGED_AGENTS_DIR = AGENTSHIELD_ROOT / "plugged_agents"
 
-# External agents folder resides completely outside agentshield:
-# C:\Users\bsska\OneDrive\Desktop\Resume Projects\external-agents
-EXTERNAL_AGENTS_DIR = Path(
-    os.getenv("EXTERNAL_AGENTS_DIR", str(AGENTSHIELD_ROOT.parent / "external-agents"))
-).resolve()
+# External agents folder: check env var, sibling folder, or repository bundle fallback
+def _get_external_agents_dir() -> Path:
+    env_dir = os.getenv("EXTERNAL_AGENTS_DIR")
+    if env_dir and Path(env_dir).exists():
+        return Path(env_dir).resolve()
+    sibling = AGENTSHIELD_ROOT.parent / "external-agents"
+    if sibling.exists() and any(sibling.iterdir()):
+        return sibling.resolve()
+    bundle = AGENTSHIELD_ROOT / "external_agents"
+    if bundle.exists():
+        return bundle.resolve()
+    return sibling.resolve()
+
+EXTERNAL_AGENTS_DIR = _get_external_agents_dir()
 
 
 class ToolManifest(BaseModel):
