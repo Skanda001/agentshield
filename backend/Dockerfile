@@ -38,9 +38,11 @@ COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 COPY app ./app
 COPY policies ./policies
+COPY external_agents ./external_agents
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
-RUN chmod +x /app/docker-entrypoint.sh \
+RUN mkdir -p /app/plugged_agents /app/external_agents \
+    && chmod +x /app/docker-entrypoint.sh \
     && groupadd --system --gid 10001 agentshield \
     && useradd --system --uid 10001 --gid agentshield --create-home agentshield \
     && chown -R agentshield:agentshield /app

@@ -1,0 +1,19 @@
+{
+  "id": "customer-support-agent",
+  "name": "Customer Support Agent",
+  "version": "1.2.0",
+  "category": "Customer Support & CRM",
+  "description": "Enterprise support agent resolving customer orders, billing disputes, and identity verification.",
+  "author": "External Enterprise Services",
+  "entrypoint": "agent.py",
+  "icon": "headphones",
+  "scopes": ["read:order", "read:customer", "write:refund"],
+  "tools": [
+    {"name": "search_customer", "classification": "internal", "risk_level": "low"},
+    {"name": "get_customer_orders", "classification": "internal", "risk_level": "low"},
+    {"name": "get_customer", "classification": "restricted", "risk_level": "medium", "requires_hitl": true},
+    {"name": "issue_refund", "classification": "internal", "risk_level": "low"},
+    {"name": "send_email", "classification": "internal", "risk_level": "medium"},
+    {"name": "delete_customer", "classification": "restricted", "risk_level": "critical", "blocked_by_default": true}
+  ]
+}

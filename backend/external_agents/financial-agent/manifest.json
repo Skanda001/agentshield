@@ -1,0 +1,16 @@
+{
+  "id": "financial-agent",
+  "name": "Financial & Treasury Agent",
+  "version": "1.0.0",
+  "category": "Fintech & Treasury",
+  "description": "Corporate financial accounting agent managing account balances, internal ledger transfers, and payment audits.",
+  "author": "External Treasury Operations",
+  "entrypoint": "agent.py",
+  "icon": "credit-card",
+  "scopes": ["read:payment", "write:transfer"],
+  "tools": [
+    {"name": "get_account_balance", "classification": "internal", "risk_level": "low"},
+    {"name": "transfer_funds", "classification": "restricted", "risk_level": "high", "requires_hitl": true},
+    {"name": "wire_funds_offshore", "classification": "restricted", "risk_level": "critical", "blocked_by_default": true}
+  ]
+}

@@ -36,26 +36,51 @@ from app.demo.bus import bus
 logger = logging.getLogger("agentshield.plugins")
 router = APIRouter(tags=["plugins"])
 
-# Resolution of paths
-# Resolution of paths
-# backend/app/api/v1/plugins.py -> backend root -> agentshield root
-AGENTSHIELD_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-PLUGGED_AGENTS_DIR = AGENTSHIELD_ROOT / "plugged_agents"
+def _find_dir(dir_name: str) -> Path:
+    """Find a directory across local dev, Docker container (/app), and repository root."""
+    env_key = dir_name.upper().replace("-", "_") + "_DIR"
+    if env_val := os.getenv(env_key):
+        p = Path(env_val).resolve()
+        if p.exists():
+            return p
 
-# External agents folder: check env var, sibling folder, or repository bundle fallback
-def _get_external_agents_dir() -> Path:
-    env_dir = os.getenv("EXTERNAL_AGENTS_DIR")
-    if env_dir and Path(env_dir).exists():
-        return Path(env_dir).resolve()
-    sibling = AGENTSHIELD_ROOT.parent / "external-agents"
-    if sibling.exists() and any(sibling.iterdir()):
-        return sibling.resolve()
-    bundle = AGENTSHIELD_ROOT / "external_agents"
-    if bundle.exists():
-        return bundle.resolve()
-    return sibling.resolve()
+    curr = Path(__file__).resolve()
+    backend_or_container = curr.parent.parent.parent.parent  # /app in Docker, or backend locally
+    repo_root = backend_or_container.parent  # agentshield locally
 
-EXTERNAL_AGENTS_DIR = _get_external_agents_dir()
+    candidates = [
+        Path(f"/app/{dir_name}"),
+        backend_or_container / dir_name,
+        backend_or_container / dir_name.replace("_", "-"),
+        repo_root / dir_name,
+        repo_root / dir_name.replace("_", "-"),
+        repo_root.parent / dir_name.replace("_", "-"),
+        Path.cwd() / dir_name,
+        Path.cwd() / dir_name.replace("_", "-"),
+        Path(f"./{dir_name}").resolve(),
+    ]
+    for c in candidates:
+        try:
+            if c.exists():
+                if "external" in dir_name:
+                    if any(c.iterdir()):
+                        return c.resolve()
+                else:
+                    return c.resolve()
+        except Exception:
+            continue
+
+    target = backend_or_container / dir_name
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        return target.resolve()
+    except Exception:
+        fallback = Path(f"/tmp/{dir_name}")
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback.resolve()
+
+PLUGGED_AGENTS_DIR = _find_dir("plugged_agents")
+EXTERNAL_AGENTS_DIR = _find_dir("external_agents")
 
 
 class ToolManifest(BaseModel):
