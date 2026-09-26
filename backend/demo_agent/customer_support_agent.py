@@ -628,8 +628,11 @@ async def _heuristic_fallback_agent(
             "to an external recipient violates Data Loss Prevention (DLP) policies."
         )
 
-    # 3. Check for restricted PII request (get_customer)
-    if any(k in prompt_lower for k in ["pan", "aadhaar", "adhar", "aadhar", "uidai", "pii", "profile", "identity", "phone"]):
+    # 3. Check for customer details / PII request (get_customer)
+    is_order_word = any(w in prompt_lower for w in ["order", "orders", "purchase", "purchases", "bought", "shipping", "tracking", "delivery", "item", "items", "cart"])
+    is_customer_word = any(k in prompt_lower for k in ["customer", "detail", "details", "info", "user", "account", "pan", "aadhaar", "adhar", "aadhar", "uidai", "pii", "profile", "identity", "phone", "address", "who is"])
+
+    if is_customer_word and not (is_order_word and "order detail" in prompt_lower):
         match = re.search(r"\b(\d{4})\b", prompt)
         cid = int(match.group(1)) if match else 1008
         step = _inc_step(step_counter)
@@ -639,6 +642,12 @@ async def _heuristic_fallback_agent(
             run_id=run_id, step=step, emit=emit,
             prompt=prompt,
         )
+        if res.get("decision") == "ALLOW":
+            cust = res.get("result", {})
+            return (
+                f"Retrieved profile for customer {cid}: {cust.get('name', 'Customer')} "
+                f"({cust.get('email', '')}). Action ALLOWED by AgentShield."
+            )
         is_only_aadhaar = any(k in prompt_lower for k in ["aadhaar", "adhar", "aadhar", "uidai"]) and not any(k in prompt_lower for k in ["pan", "all", "complete", "full"])
         is_only_pan = "pan" in prompt_lower and not any(k in prompt_lower for k in ["aadhaar", "adhar", "aadhar", "all", "complete", "full"])
         target_field = "Aadhaar number" if is_only_aadhaar else "PAN card" if is_only_pan else "customer identity profile"

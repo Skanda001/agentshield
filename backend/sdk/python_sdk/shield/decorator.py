@@ -65,8 +65,7 @@ def protect(
     def decorator(func: Callable) -> Callable:
         tool_name = tool or func.__name__
 
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def _evaluate_gateway(args: tuple, kwargs: dict):
             # Strip a stray `kwargs` key that some LangChain versions pass.
             if "kwargs" in kwargs and isinstance(kwargs["kwargs"], dict):
                 merged = dict(kwargs.pop("kwargs"))
@@ -74,9 +73,9 @@ def protect(
                 kwargs = merged
 
             arguments = _bind_arguments(func, args, kwargs)
+            cli = client or _get_client()
 
             try:
-                cli = client or _get_client()
                 decision = cli.decide(
                     tool=tool_name,
                     arguments=arguments,
@@ -88,7 +87,7 @@ def protect(
                     logger.error("[shield] %s(%s) → gateway error: %s", tool_name, arguments, e)
                     raise
                 logger.warning("[shield] %s → gateway unreachable, fail-open: %s", tool_name, e)
-                return func(*args, **kwargs)
+                return "FAIL_OPEN", None, None
 
             logger.info(
                 "[shield] %s(%s) → %s (risk=%.0f, reason=%s)",
@@ -97,23 +96,53 @@ def protect(
             )
 
             if decision.verdict == "ALLOW":
-                return func(*args, **kwargs)
+                return "ALLOW", decision, None
 
             if decision.verdict == "BLOCK":
                 raise ShieldBlocked(
                     reason="; ".join(decision.reasons) or "Blocked by AgentShield",
                     decision_id=decision.decision_id,
                     risk_score=decision.risk_score,
+                    tool=tool_name,
                 )
 
             if decision.verdict == "ESCALATE":
+                approval_id = None
+                try:
+                    app = cli.get_approval_for_decision(decision.decision_id)
+                    if app:
+                        approval_id = str(app.get("id"))
+                except Exception:
+                    pass
                 raise ShieldEscalated(
                     reason="; ".join(decision.reasons) or "Requires human approval",
                     decision_id=decision.decision_id,
                     risk_score=decision.risk_score,
+                    tool=tool_name,
+                    approval_id=approval_id,
                 )
 
             raise ShieldError(f"Unknown verdict from AgentShield: {decision.verdict}")
-        return wrapper
+
+        if inspect.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                action, _, _ = _evaluate_gateway(args, kwargs)
+                return await func(*args, **kwargs)
+
+            async_wrapper._shield_tool = tool_name
+            async_wrapper._shield_resource_type = resource_type
+            async_wrapper._shield_classification = data_classification
+            return async_wrapper
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                action, _, _ = _evaluate_gateway(args, kwargs)
+                return func(*args, **kwargs)
+
+            sync_wrapper._shield_tool = tool_name
+            sync_wrapper._shield_resource_type = resource_type
+            sync_wrapper._shield_classification = data_classification
+            return sync_wrapper
 
     return decorator

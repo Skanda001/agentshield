@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent"
+version = "1.0.0"
+description = "Pluggable external AI agents protected by AgentShield security gateway"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "agentshield>=0.1.0",
+    "groq>=0.9.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.scripts]
+agent = "agent.runner:main"
+
+[tool.setuptools]
+packages = ["agent", "agent.data", "agent.agents"]
+package-dir = {"agent" = "."}

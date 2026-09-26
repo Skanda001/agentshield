@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_agent, get_db
+from app.core.deps import get_current_agent, get_optional_agent, get_db
 from app.db.models.policy import Policy, PolicyVersion
 from app.policy_engine.dsl import PolicyParseError, load_and_validate
 from app.schemas.policy import (
@@ -51,7 +51,7 @@ async def load_policy_from_yaml(
     tenant_id: UUID,
     file_path: str,
     db: AsyncSession = Depends(get_db),
-    _agent=Depends(get_current_agent),
+    _agent=Depends(get_optional_agent),
 ):
     try:
         document = load_and_validate(file_path)

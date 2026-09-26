@@ -20,7 +20,10 @@ function Landing() {
       await tryDemo();
       navigate({ to: "/app" });
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Demo setup failed");
+      console.error("Demo setup error:", err);
+      const detail = err?.response?.data?.detail;
+      const msg = typeof detail === "string" ? detail : (err?.message || "Demo setup failed. Please try again.");
+      setError(msg);
     } finally {
       setLoading(false);
     }

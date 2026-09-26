@@ -39,6 +39,8 @@ class DecideResponse(BaseModel):
     pii_classification: Optional[str] = None
     pii_labels: list[str] = Field(default_factory=list)
 
+    approval_id: Optional[UUID] = None
+
     created_at: datetime
 
     model_config = {"from_attributes": True}

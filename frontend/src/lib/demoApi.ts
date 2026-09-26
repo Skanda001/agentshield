@@ -121,4 +121,23 @@ export async function getPromptSuggestions(): Promise<PromptSuggestion[]> {
   const r = await api.get("/demo/agent/suggestions");
   return r.data;
 }
+
+export async function runPluginPrompt(opts: {
+  runId: string;
+  agentId: string;
+  prompt: string;
+  autoApprove?: boolean;
+}): Promise<AgentPromptResponse> {
+  const r = await api.post("/plugins/run", {
+    run_id: opts.runId,
+    agent_id: opts.agentId,
+    prompt: opts.prompt,
+    auto_approve: opts.autoApprove ?? false,
+  });
+  return {
+    run_id: r.data.run_id,
+    prompt: r.data.prompt,
+    events: r.data.events,
+  };
+}
 

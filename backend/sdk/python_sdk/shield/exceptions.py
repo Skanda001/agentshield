@@ -12,18 +12,34 @@ class ShieldConfigError(ShieldError):
 class ShieldBlocked(ShieldError):
     """Raised when AgentShield returns verdict=BLOCK."""
 
-    def __init__(self, reason: str, decision_id: str | None = None, risk_score: float = 0.0):
+    def __init__(
+        self,
+        reason: str,
+        decision_id: str | None = None,
+        risk_score: float = 0.0,
+        tool: str | None = None,
+    ):
         super().__init__(reason)
         self.reason = reason
         self.decision_id = decision_id
         self.risk_score = risk_score
+        self.tool = tool
 
 
 class ShieldEscalated(ShieldError):
     """Raised when AgentShield returns verdict=ESCALATE (human approval required)."""
 
-    def __init__(self, reason: str, decision_id: str | None = None, risk_score: float = 0.0):
+    def __init__(
+        self,
+        reason: str,
+        decision_id: str | None = None,
+        risk_score: float = 0.0,
+        tool: str | None = None,
+        approval_id: str | None = None,
+    ):
         super().__init__(reason)
         self.reason = reason
         self.decision_id = decision_id
         self.risk_score = risk_score
+        self.tool = tool
+        self.approval_id = approval_id

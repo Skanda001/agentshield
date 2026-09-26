@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     APPROVAL_BASE_URL: str = "http://localhost:8001"
     APPROVAL_TIMEOUT_MINUTES: int = 30
 
+    # Supabase Audit Logging
+    SUPABASE_URL: str = ""
+    SUPABASE_KEY: str = ""
+    SUPABASE_TABLE: str = "agentshield_call_logs"
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

@@ -8,7 +8,7 @@ from shield.exceptions import ShieldConfigError, ShieldError
 from shield.models import Decision
 
 
-DEFAULT_API_URL = "http://localhost:8001"
+DEFAULT_API_URL = "http://localhost:8002"
 TIMEOUT_SECONDS = 10.0
 
 
@@ -95,3 +95,77 @@ class ShieldClient:
             raise ShieldError(f"Decision request failed: {r.status_code} {r.text}")
 
         return Decision.from_dict(r.json())
+
+    def list_approvals(
+        self,
+        status: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List human approvals from AgentShield."""
+        url = f"{self.api_url}/api/v1/approvals"
+        params: dict[str, Any] = {"limit": limit}
+        if status:
+            params["status"] = status
+        try:
+            r = httpx.get(url, params=params, headers=self._headers(), timeout=self.timeout)
+            if r.status_code == 401:
+                self._cached_token = None
+                r = httpx.get(url, params=params, headers=self._headers(), timeout=self.timeout)
+            if r.status_code != 200:
+                raise ShieldError(f"Failed to list approvals: {r.status_code} {r.text}")
+            return r.json()
+        except httpx.HTTPError as e:
+            raise ShieldError(f"AgentShield unreachable: {e}") from e
+
+    def get_approval(self, approval_id: str) -> dict[str, Any]:
+        """Fetch a specific approval by its UUID."""
+        url = f"{self.api_url}/api/v1/approvals/{approval_id}"
+        try:
+            r = httpx.get(url, headers=self._headers(), timeout=self.timeout)
+            if r.status_code == 401:
+                self._cached_token = None
+                r = httpx.get(url, headers=self._headers(), timeout=self.timeout)
+            if r.status_code != 200:
+                raise ShieldError(f"Failed to get approval {approval_id}: {r.status_code} {r.text}")
+            return r.json()
+        except httpx.HTTPError as e:
+            raise ShieldError(f"AgentShield unreachable: {e}") from e
+
+    def decide_approval(
+        self,
+        approval_id: str,
+        approved: bool,
+        decided_by: str = "supervisor",
+        note: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Approve or deny a pending human approval."""
+        url = f"{self.api_url}/api/v1/approvals/{approval_id}/decide"
+        body = {
+            "approved": approved,
+            "decided_by": decided_by,
+            "note": note or ("Approved via AgentShield SDK" if approved else "Denied via AgentShield SDK"),
+        }
+        try:
+            r = httpx.post(url, json=body, headers=self._headers(), timeout=self.timeout)
+            if r.status_code == 401:
+                self._cached_token = None
+                r = httpx.post(url, json=body, headers=self._headers(), timeout=self.timeout)
+            if r.status_code != 200:
+                raise ShieldError(f"Failed to decide approval {approval_id}: {r.status_code} {r.text}")
+            return r.json()
+        except httpx.HTTPError as e:
+            raise ShieldError(f"AgentShield unreachable: {e}") from e
+
+    def get_approval_for_decision(self, decision_id: str) -> Optional[dict[str, Any]]:
+        """Find the pending approval associated with a decision_id."""
+        approvals = self.list_approvals(status="pending", limit=50)
+        target = str(decision_id)
+        for app in approvals:
+            if str(app.get("decision_id")) == target:
+                return app
+        # Fallback: check all recent approvals
+        all_apps = self.list_approvals(limit=50)
+        for app in all_apps:
+            if str(app.get("decision_id")) == target:
+                return app
+        return None

@@ -12,6 +12,15 @@ rules:
     effect: allow
     action: read
     resource: customer
+    priority: 10
+
+  - name: escalate_restricted_customer
+    effect: escalate
+    action: read
+    resource: customer
+    conditions:
+      data_classification: restricted
+    priority: 50
 
   - name: deny_customer_delete
     effect: deny

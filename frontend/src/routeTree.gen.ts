@@ -17,6 +17,7 @@ import { Route as AppApprovalsRouteImport } from './routes/app.approvals'
 import { Route as AppAuditRouteImport } from './routes/app.audit'
 import { Route as AppDemoRouteImport } from './routes/app.demo'
 import { Route as AppKillSwitchRouteImport } from './routes/app.kill-switch'
+import { Route as AppPluginsRouteImport } from './routes/app.plugins'
 import { Route as AppPoliciesRouteImport } from './routes/app.policies'
 
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +60,11 @@ const AppKillSwitchRoute = AppKillSwitchRouteImport.update({
   path: '/kill-switch',
   getParentRoute: () => AppRoute,
 } as any)
+const AppPluginsRoute = AppPluginsRouteImport.update({
+  id: '/plugins',
+  path: '/plugins',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPoliciesRoute = AppPoliciesRouteImport.update({
   id: '/policies',
   path: '/policies',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/app/audit': typeof AppAuditRoute
   '/app/demo': typeof AppDemoRoute
   '/app/kill-switch': typeof AppKillSwitchRoute
+  '/app/plugins': typeof AppPluginsRoute
   '/app/policies': typeof AppPoliciesRoute
   '/app/': typeof AppIndexRoute
 }
@@ -83,6 +90,7 @@ export interface FileRoutesByTo {
   '/app/audit': typeof AppAuditRoute
   '/app/demo': typeof AppDemoRoute
   '/app/kill-switch': typeof AppKillSwitchRoute
+  '/app/plugins': typeof AppPluginsRoute
   '/app/policies': typeof AppPoliciesRoute
   '/app': typeof AppIndexRoute
 }
@@ -95,6 +103,7 @@ export interface FileRoutesById {
   '/app/audit': typeof AppAuditRoute
   '/app/demo': typeof AppDemoRoute
   '/app/kill-switch': typeof AppKillSwitchRoute
+  '/app/plugins': typeof AppPluginsRoute
   '/app/policies': typeof AppPoliciesRoute
   '/app/': typeof AppIndexRoute
 }
@@ -108,6 +117,7 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/demo'
     | '/app/kill-switch'
+    | '/app/plugins'
     | '/app/policies'
     | '/app/'
   fileRoutesByTo: FileRoutesByTo
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/demo'
     | '/app/kill-switch'
+    | '/app/plugins'
     | '/app/policies'
     | '/app'
   id:
@@ -129,6 +140,7 @@ export interface FileRouteTypes {
     | '/app/audit'
     | '/app/demo'
     | '/app/kill-switch'
+    | '/app/plugins'
     | '/app/policies'
     | '/app/'
   fileRoutesById: FileRoutesById
@@ -197,6 +209,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppKillSwitchRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/plugins': {
+      id: '/app/plugins'
+      path: '/plugins'
+      fullPath: '/app/plugins'
+      preLoaderRoute: typeof AppPluginsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/policies': {
       id: '/app/policies'
       path: '/policies'
@@ -212,6 +231,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppDemoRoute: typeof AppDemoRoute
   AppKillSwitchRoute: typeof AppKillSwitchRoute
+  AppPluginsRoute: typeof AppPluginsRoute
   AppPoliciesRoute: typeof AppPoliciesRoute
   AppIndexRoute: typeof AppIndexRoute
 }
@@ -221,6 +241,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppDemoRoute: AppDemoRoute,
   AppKillSwitchRoute: AppKillSwitchRoute,
+  AppPluginsRoute: AppPluginsRoute,
   AppPoliciesRoute: AppPoliciesRoute,
   AppIndexRoute: AppIndexRoute,
 }

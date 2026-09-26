@@ -4,6 +4,7 @@ Chunk 10: check kill switches BEFORE policy evaluation.
 If any switch is active, BLOCK immediately with the switch reason.
 """
 from dataclasses import dataclass
+from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -164,10 +165,13 @@ async def run(
     await _audit(decision, agent)
 
     # ── 5. Create approval for ESCALATE ──────────────────────
+    approval_id = None
     if final_verdict == "ESCALATE":
-        await _create_approval_if_escalated(decision, agent)
+        approval = await _create_approval_if_escalated(decision, agent)
+        if approval:
+            approval_id = approval.id
 
-    return PipelineResult(decision=decision, response=_to_response(decision))
+    return PipelineResult(decision=decision, response=_to_response(decision, approval_id=approval_id))
 
 
 async def _audit(decision: Decision, agent: Agent) -> None:
@@ -197,8 +201,29 @@ async def _audit(decision: Decision, agent: Agent) -> None:
             tenant_id=agent.tenant_id,
         )
 
+    # Stream to Supabase for centralized security logging
+    try:
+        from app.services.supabase_logger import log_decision_async
+        log_decision_async(
+            decision_id=decision.id,
+            tool=decision.tool,
+            verdict=decision.verdict,
+            reasons=decision.reasons or [],
+            risk_score=decision.risk_score,
+            arguments=decision.arguments or {},
+            agent_id=agent.id,
+            agent_name=agent.name,
+            policy_rule=decision.policy_rule,
+            policy_effect=decision.policy_effect,
+            data_classification=decision.pii_classification,
+            pii_labels=decision.pii_labels,
+            created_at=decision.created_at,
+        )
+    except Exception as e:
+        pass
 
-async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> None:
+
+async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> Any:
     from app.db.session import AsyncSessionLocal
     from app.hitl.slack_adapter import send_approval_request
 
@@ -208,7 +233,7 @@ async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> Non
                 db, decision=decision, agent=agent
             )
         except approval_service.ApprovalServiceError:
-            return
+            return None
 
         from app.core.config import settings
         base = getattr(settings, "APPROVAL_BASE_URL", "http://localhost:8001")
@@ -227,9 +252,10 @@ async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> Non
         if err:
             approval.notification_error = err[:500]
         await db.commit()
+        return approval
 
 
-def _to_response(decision: Decision) -> DecideResponse:
+def _to_response(decision: Decision, approval_id: Any = None) -> DecideResponse:
     return DecideResponse(
         decision_id=decision.id,
         verdict=decision.verdict,
@@ -244,5 +270,6 @@ def _to_response(decision: Decision) -> DecideResponse:
         injection_score=decision.injection_score,
         pii_classification=decision.pii_classification,
         pii_labels=decision.pii_labels,
+        approval_id=approval_id,
         created_at=decision.created_at,
     )

@@ -42,7 +42,7 @@ export default function DemoEventDetail({
         approved,
         "demo-supervisor",
         undefined,
-        prompt
+        prompt || (event.args as any)?.prompt || ""
       );
       setDone(approved ? "approved" : "denied");
       if (res.output) {
@@ -61,7 +61,7 @@ export default function DemoEventDetail({
 
   const isHitl = event.decision === "HITL" && !done;
   const currentVerdict = done === "approved" ? "ALLOW" : done === "denied" ? "BLOCK" : event.decision;
-  const isExecuted = done === "approved" ? true : done === "denied" ? false : event.execution.executed;
+  const isExecuted = done === "approved" ? true : done === "denied" ? false : (event.execution?.executed ?? false);
   const findings = event.findings ?? [];
 
   return (
@@ -72,9 +72,9 @@ export default function DemoEventDetail({
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <Stat label="Step" value={String(event.step)} />
-        <Stat label="Risk" value={done === "approved" ? "15" : done === "denied" ? "100" : String(event.risk.score)} />
-        <Stat label="Attempted" value={String(event.execution.attempted)} />
+        <Stat label="Step" value={String(event.step ?? 1)} />
+        <Stat label="Risk" value={done === "approved" ? "15" : done === "denied" ? "100" : String(event.risk?.score ?? 0)} />
+        <Stat label="Attempted" value={String(event.execution?.attempted ?? false)} />
         <Stat label="Executed" value={String(isExecuted)} />
       </div>
 

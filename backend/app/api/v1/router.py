@@ -8,6 +8,8 @@ from app.api.v1.policies import router as policies_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.approvals import router as approvals_router
 from app.api.v1.kill_switch import router as kill_switch_router
+from app.api.v1.plugins import router as plugins_router
+from app.api.v1.supabase_logs import router as supabase_router
 from app.demo.interactive_routes import router as interactive_agent_router
 
 
@@ -19,4 +21,6 @@ api_router.include_router(policies_router)
 api_router.include_router(audit_router)
 api_router.include_router(approvals_router)
 api_router.include_router(kill_switch_router)
+api_router.include_router(plugins_router)
+api_router.include_router(supabase_router)
 api_router.include_router(interactive_agent_router)

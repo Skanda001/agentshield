@@ -7,8 +7,10 @@ providing security test prompt suggestions.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -25,19 +27,21 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_agent, get_db
+from app.core.deps import get_current_agent, get_db, get_optional_agent
 from app.core.security import decode_agent_token
 from app.db.models.agent import Agent
 from app.db.models.approval import Approval
 from app.demo.bus import bus
 from app.services import approval_service as svc
 
-# The demo agent is a client of AgentShield; guard import so AgentShield starts cleanly in production Docker
+# The agent is a decoupled client of AgentShield; guard import so AgentShield starts cleanly in production Docker
 try:
-    from demo_agent.customer_support_agent import TOOLS, run_customer_support_agent
+    import agent
+    from agent.agents.support_agent import RAW_TOOLS
+    TOOLS = RAW_TOOLS
 except (ImportError, ModuleNotFoundError):
+    agent = None
     TOOLS = {}
-    run_customer_support_agent = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["interactive-agent"])
@@ -135,39 +139,35 @@ async def run_agent_prompt(
     if not payload.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt must not be empty.")
 
-    if run_customer_support_agent is None:
+    if agent is None:
         raise HTTPException(
             status_code=501,
             detail=(
-                "The demo agent is a standalone client and is not bundled inside the AgentShield core server image. "
-                "To run the demo agent, execute it as a client using: python -m demo_agent.customer_support_agent"
+                "The agent is a decoupled client and is not bundled inside the AgentShield core server image. "
+                "To run the agent, execute it as a client using: python -m agent <prompt>"
             ),
         )
 
     collected: list[dict[str, Any]] = []
-    run_id_holder: dict[str, str] = {}
-    if payload.run_id:
-        run_id_holder["run_id"] = payload.run_id
+    run_id = payload.run_id or str(uuid.uuid4())
 
     async def _emit(ev: dict[str, Any]) -> None:
         collected.append(ev)
-        rid = ev.get("run_id")
-        if rid:
-            run_id_holder["run_id"] = rid
-            await bus.publish(rid, ev)
+        await bus.publish(run_id, ev)
 
     try:
-        await run_customer_support_agent(
+        support_agent = agent.get_agent("support")
+        await support_agent.run_async(
             payload.prompt,
-            _emit,
-            run_id=payload.run_id,
-            model=payload.model,
+            run_id=run_id,
+            event_callback=_emit,
+            interactive=False,
+            auto_approve=False,
         )
     except Exception as e:
         logger.exception("Customer support agent run failed: %s", e)
         raise HTTPException(status_code=500, detail=f"Agent execution error: {e}")
 
-    run_id = run_id_holder.get("run_id") or "unknown"
     await bus.close(run_id)
 
     return AgentPromptResponse(
@@ -186,6 +186,7 @@ def format_approved_output(
     args: dict[str, Any],
     output: dict[str, Any],
     prompt: str = "",
+    approval_context: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Format authorized tool output and enforce least-privilege data minimization based on the user's prompt."""
     if tool == "get_customer":
@@ -205,14 +206,20 @@ def format_approved_output(
         vip = "Yes (VIP)" if output.get("is_vip") else "Standard"
         cid = output.get("display_id", args.get("customer_id"))
 
-        p_lower = prompt.lower().strip()
-        wants_aadhaar = any(w in p_lower for w in ["aadhaar", "adhar", "uidai", "aadhar"])
-        wants_pan = "pan" in p_lower
+        p_lower = (prompt or "").lower().strip()
+        ctx_reasons = " ".join(str(r) for r in (approval_context or {}).get("reasons", [])).lower()
+        search_text = f"{p_lower} {ctx_reasons}"
+
+        # Aadhaar detection
+        wants_aadhaar = any(w in search_text for w in ["aadhaar", "adhar", "uidai", "aadhar"])
+        # PAN detection (avoid substrings like company, japan, span)
+        wants_pan = ("pan" in search_text and not any(w in p_lower for w in ["company", "japan", "span", "expand"]))
         wants_phone = any(w in p_lower for w in ["phone", "mobile", "contact"])
         wants_address = any(w in p_lower for w in ["address", "location", "residence"])
+        wants_all = any(w in p_lower for w in ["all", "everything", "full profile", "entire", "complete"])
 
-        # 1. User specifically asked for Aadhaar only
-        if wants_aadhaar and not wants_pan and not wants_phone and not wants_address:
+        # 1. User specifically asked for Aadhaar only (or Aadhaar was the sole escalated sensitivity)
+        if (wants_aadhaar and not wants_all and not (wants_pan and "pan" in p_lower) and not wants_phone and not wants_address) or (not p_lower and not wants_pan):
             filtered_output = {
                 "found": True,
                 "display_id": cid,
@@ -416,12 +423,17 @@ async def decide_approval_endpoint(
         if fn:
             raw_fn = getattr(fn, "__wrapped__", fn)
             try:
-                tool_output = await raw_fn(**args)
+                if inspect.iscoroutinefunction(raw_fn):
+                    tool_output = await raw_fn(**args)
+                else:
+                    tool_output = raw_fn(**args)
             except Exception as e:
                 logger.exception("Error executing approved tool %s: %s", tool_name, e)
                 tool_output = {"error": str(e), "found": False}
 
-        agent_response, filtered_output = format_approved_output(tool_name, args, tool_output, prompt=user_prompt)
+        agent_response, filtered_output = format_approved_output(
+            tool_name, args, tool_output, prompt=user_prompt, approval_context=req_ctx
+        )
 
         updated_event = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -546,7 +558,7 @@ async def demo_ws(
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/demo/scenarios")
-async def list_scenarios(_agent: Agent = Depends(get_current_agent)):
+async def list_scenarios(_agent: Optional[Agent] = Depends(get_optional_agent)):
     """Legacy canned scenarios endpoint returning empty list."""
     return []
 

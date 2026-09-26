@@ -36,3 +36,6 @@ Thumbs.db
 setenv.bat
 neon-url.txt
 postgresqlneondb_*.txt
+
+# Dynamic runtime mounted agents
+plugged_agents/

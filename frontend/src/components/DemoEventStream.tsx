@@ -17,9 +17,9 @@ export default function DemoEventStream({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [events.length]);
+  }, [events?.length]);
 
-  if (events.length === 0) {
+  if (!events || events.length === 0) {
     return (
       <div className="card p-8 text-center text-sm text-gray-500">
         {running
@@ -61,7 +61,7 @@ export default function DemoEventStream({
                 </span>
                 <VerdictBadge verdict={ev.decision} />
                 <span className="text-xs text-gray-500 w-8 text-right font-mono">
-                  {ev.risk.score}
+                  {ev.risk?.score ?? 0}
                 </span>
               </div>
               {ev.tool === "agent.final" && ev.text && (
@@ -79,9 +79,9 @@ export default function DemoEventStream({
                 </div>
               )}
 
-              {ev.findings.length > 0 && (
+              {(ev.findings?.length ?? 0) > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5 pl-9">
-                  {ev.findings.map((f, i) => (
+                  {(ev.findings ?? []).map((f, i) => (
                     <span
                       key={i}
                       className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-danger-soft text-danger border border-danger/20"

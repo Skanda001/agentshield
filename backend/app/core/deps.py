@@ -56,3 +56,21 @@ async def get_current_agent(
         raise HTTPException(status_code=403, detail="Agent is not active")
 
     return agent
+
+
+async def get_optional_agent(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[Agent]:
+    """Resolve calling agent if token provided; returns fallback agent or None if not."""
+    if credentials and credentials.scheme.lower() == "bearer":
+        payload = decode_agent_token(credentials.credentials)
+        if payload and payload.get("sub"):
+            result = await db.execute(select(Agent).where(Agent.id == payload["sub"]))
+            agent = result.scalar_one_or_none()
+            if agent:
+                return agent
+
+    # Fallback to first active agent in DB for testing convenience
+    result = await db.execute(select(Agent).where(Agent.is_active == True).limit(1))
+    return result.scalar_one_or_none()

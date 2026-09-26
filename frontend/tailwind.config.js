@@ -18,6 +18,7 @@ export default {
         "success-soft": "#2ecc7120",
         warn: "#ffb84b",
         "warn-soft": "#ffb84b20",
+        "slate-850": "#131a29",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],

@@ -16,13 +16,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Auto-logout on 401
+// Auto-logout on 401 only if inside protected /app routes
 api.interceptors.response.use(
   (r) => r,
   (error) => {
     if (error?.response?.status === 401) {
-      localStorage.removeItem("token");
-      if (window.location.pathname !== "/login") {
+      if (window.location.pathname.startsWith("/app")) {
+        localStorage.removeItem("token");
         window.location.href = "/login";
       }
     }
