@@ -153,7 +153,12 @@ def _get_agent_info(agent_dir: Path, is_plugged_in: bool) -> AgentPluginInfo:
             logger.warning("Error reading manifest for %s: %s", agent_dir.name, e)
 
     agent_id = data.get("id") or agent_dir.name
-    tools = [ToolManifest(**t) for t in data.get("tools", [])]
+    tools: list[ToolManifest] = []
+    for t in data.get("tools", []):
+        try:
+            tools.append(ToolManifest(**t))
+        except Exception:
+            pass
 
     return AgentPluginInfo(
         id=agent_id,
@@ -176,28 +181,42 @@ def _get_agent_info(agent_dir: Path, is_plugged_in: bool) -> AgentPluginInfo:
 @router.get("/plugins", response_model=list[AgentPluginInfo])
 async def list_plugins():
     """List all external agents available in the ecosystem and their plugged-in status."""
-    PLUGGED_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        PLUGGED_AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.warning("Could not create PLUGGED_AGENTS_DIR: %s", e)
+
     results: list[AgentPluginInfo] = []
     seen_ids: set[str] = set()
 
-    # 1. Discover all agents in external-agents directory
-    if EXTERNAL_AGENTS_DIR.exists() and EXTERNAL_AGENTS_DIR.is_dir():
-        for item in EXTERNAL_AGENTS_DIR.iterdir():
-            if item.is_dir() and not item.name.startswith(".") and "copy" not in item.name.lower():
-                is_mounted = (PLUGGED_AGENTS_DIR / item.name).exists()
-                info = _get_agent_info(item, is_plugged_in=is_mounted)
-                if info.id not in seen_ids:
-                    results.append(info)
-                    seen_ids.add(info.id)
+    try:
+        # 1. Discover all agents in external-agents directory
+        if EXTERNAL_AGENTS_DIR.exists() and EXTERNAL_AGENTS_DIR.is_dir():
+            for item in EXTERNAL_AGENTS_DIR.iterdir():
+                try:
+                    if item.is_dir() and not item.name.startswith(".") and "copy" not in item.name.lower():
+                        is_mounted = (PLUGGED_AGENTS_DIR / item.name).exists() if PLUGGED_AGENTS_DIR.exists() else False
+                        info = _get_agent_info(item, is_plugged_in=is_mounted)
+                        if info.id not in seen_ids:
+                            results.append(info)
+                            seen_ids.add(info.id)
+                except Exception as ex:
+                    logger.warning("Error inspecting item %s: %s", item, ex)
 
-    # 2. Check any plugged agents that might not be in external-agents dir
-    for item in PLUGGED_AGENTS_DIR.iterdir():
-        if item.is_dir() and not item.name.startswith(".") and "copy" not in item.name.lower():
-            is_mounted = True
-            info = _get_agent_info(item, is_plugged_in=is_mounted)
-            if info.id not in seen_ids:
-                results.append(info)
-                seen_ids.add(info.id)
+        # 2. Check any plugged agents that might not be in external-agents dir
+        if PLUGGED_AGENTS_DIR.exists() and PLUGGED_AGENTS_DIR.is_dir():
+            for item in PLUGGED_AGENTS_DIR.iterdir():
+                try:
+                    if item.is_dir() and not item.name.startswith(".") and "copy" not in item.name.lower():
+                        is_mounted = True
+                        info = _get_agent_info(item, is_plugged_in=is_mounted)
+                        if info.id not in seen_ids:
+                            results.append(info)
+                            seen_ids.add(info.id)
+                except Exception as ex:
+                    logger.warning("Error inspecting plugged item %s: %s", item, ex)
+    except Exception as e:
+        logger.exception("list_plugins encountered error: %s", e)
 
     return results
 
