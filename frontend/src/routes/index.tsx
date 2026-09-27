@@ -44,15 +44,7 @@ function Landing() {
           <span className="font-bold text-lg">AgentShield</span>
         </div>
         <div className="flex items-center gap-4">
-          <a
-            href="https://github.com/skandabs001/agentshield"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
-          >
-            <Github className="w-4 h-4" />
-            GitHub
-          </a>
+          
           {isAuthenticated ? (
             <Link to="/app" className="btn-primary text-sm">
               Go to Dashboard
