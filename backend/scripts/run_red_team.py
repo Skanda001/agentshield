@@ -19,7 +19,7 @@ import httpx
 # Make `attack_library` importable when run as a script.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-API_URL = os.getenv("AGENTSHIELD_API_URL", "http://localhost:8001").rstrip("/")
+API_URL = os.getenv("AGENTSHIELD_API_URL", "http://localhost:8000").rstrip("/")
 API_KEY = os.getenv("AGENTSHIELD_API_KEY")
 
 if not API_KEY:

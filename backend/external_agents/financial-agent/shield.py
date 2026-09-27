@@ -21,7 +21,7 @@ logger = logging.getLogger("shield.sdk")
 def _get_default_gateway_url() -> str:
     if url := os.getenv("AGENTSHIELD_URL"):
         return url.rstrip("/")
-    port = os.getenv("PORT", "8000" if sys.platform != "win32" else "8002")
+    port = os.getenv("PORT", "8000")
     return f"http://127.0.0.1:{port}"
 
 DEFAULT_GATEWAY_URL = _get_default_gateway_url()

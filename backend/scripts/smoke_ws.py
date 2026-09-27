@@ -18,8 +18,8 @@ import uuid
 import httpx
 import websockets
 
-API_HTTP = "http://localhost:8001"
-API_WS = "ws://localhost:8001"
+API_HTTP = "http://localhost:8000"
+API_WS = "ws://localhost:8000"
 
 
 async def main() -> None:

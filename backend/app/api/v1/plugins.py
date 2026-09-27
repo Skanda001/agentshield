@@ -346,7 +346,7 @@ async def plug_in_agent(
             "scopes": info.scopes,
         },
         agent_id=db_agent.id,
-        tenant_id=current_agent.tenant_id,
+        tenant_id=db_agent.tenant_id,
         note=f"Agent '{info.name}' physically mounted into plugged_agents/{agent_id}",
     )
 
@@ -452,7 +452,7 @@ async def run_plugin_agent(
             pass
 
     # Resolve internal gateway URL & issue valid agent token
-    port = os.getenv("PORT", "8000" if sys.platform != "win32" else "8002")
+    port = os.getenv("PORT", "8000")
     gateway_url = os.getenv("AGENTSHIELD_URL") or f"http://127.0.0.1:{port}"
     os.environ["AGENTSHIELD_URL"] = gateway_url
 

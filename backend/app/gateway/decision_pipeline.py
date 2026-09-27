@@ -236,7 +236,7 @@ async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> Any
             return None
 
         from app.core.config import settings
-        base = getattr(settings, "APPROVAL_BASE_URL", "http://localhost:8001")
+        base = getattr(settings, "APPROVAL_BASE_URL", "http://localhost:8000")
         ok, err = await send_approval_request(
             approval_id=str(approval.id),
             tool=approval.tool,

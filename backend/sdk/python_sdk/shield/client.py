@@ -8,7 +8,7 @@ from shield.exceptions import ShieldConfigError, ShieldError
 from shield.models import Decision
 
 
-DEFAULT_API_URL = "http://localhost:8002"
+DEFAULT_API_URL = "http://localhost:8000"
 TIMEOUT_SECONDS = 10.0
 
 
@@ -16,7 +16,7 @@ class ShieldClient:
     """Client used by the @protect decorator. Reads env vars by default.
 
     env:
-      AGENTSHIELD_API_URL   (default: http://localhost:8001)
+      AGENTSHIELD_API_URL   (default: http://localhost:8000)
       AGENTSHIELD_API_KEY   (required)
     """
 

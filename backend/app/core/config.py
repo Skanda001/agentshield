@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # HITL
     SLACK_WEBHOOK_URL: str = ""
-    APPROVAL_BASE_URL: str = "http://localhost:8001"
+    APPROVAL_BASE_URL: str = "http://localhost:8000"
     APPROVAL_TIMEOUT_MINUTES: int = 30
 
     # Supabase Audit Logging

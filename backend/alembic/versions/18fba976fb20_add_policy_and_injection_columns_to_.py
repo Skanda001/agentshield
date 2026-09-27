@@ -1,7 +1,7 @@
 """add policy and injection columns to decisions
 
 Revision ID: 18fba976fb20
-Revises: 23c44c9eb977
+Revises: 06081f326022
 Create Date: 2026-09-18 12:08:22.020760
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '18fba976fb20'
-down_revision: Union[str, None] = '23c44c9eb977'
+down_revision: Union[str, None] = '06081f326022'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
