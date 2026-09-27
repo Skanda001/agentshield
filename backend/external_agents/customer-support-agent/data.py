@@ -38,25 +38,50 @@ class StandaloneCRM:
                     items TEXT
                 );
             """)
-            # Seed Customers
-            cur.executemany(
-                "INSERT INTO customers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [
-                    (1001, 1001, "Alice Sharma", "alice@example.com", "9876543210", "12 Park Street, Bangalore", "5521 8839 1234", "ABCDE1234F", "Active"),
-                    (1008, 1008, "Priya Verma", "priya.verma@example.com", "9823456789", "45 Marine Drive, Mumbai", "6489 3127 5541", "BKLPY4321A", "Active"),
-                    (1042, 1042, "Rajesh Kumar", "rajesh.kumar@example.com", "9845123456", "77 Connaught Place, New Delhi", "9123 4567 8901", "BNZPK9988H", "Active"),
-                ],
-            )
-            # Seed Orders
-            cur.executemany(
-                "INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?)",
-                [
-                    (8211, 8211, 1008, "delivered", 45.00, '[{"item": "Wireless Earbuds", "qty": 1}]'),
-                    (4821, 4821, 1001, "shipped", 129.99, '[{"item": "Mechanical Keyboard", "qty": 1}]'),
-                    (4822, 4822, 1001, "delivered", 24.50, '[{"item": "Laptop Sleeve", "qty": 1}]'),
-                ],
-            )
-            self._conn.commit()
+            # Try to populate from real PostgreSQL database if available
+            pg_loaded = False
+            try:
+                import os, psycopg
+                db_url = os.getenv("DATABASE_URL", "postgresql://agentshield:agentshield@localhost:5433/agentshield")
+                pg_url = db_url.replace("postgresql+psycopg://", "postgresql://").replace("postgresql+asyncpg://", "postgresql://")
+                with psycopg.connect(pg_url, connect_timeout=3) as pg_conn:
+                    with pg_conn.cursor() as pg_cur:
+                        pg_cur.execute("SELECT display_id, display_id, name, email, phone, address, aadhaar, pan, account_status FROM customers")
+                        c_rows = pg_cur.fetchall()
+                        if c_rows:
+                            cur.executemany("INSERT OR REPLACE INTO customers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", c_rows)
+                            pg_cur.execute("""
+                                SELECT o.display_id, o.display_id, c.display_id, o.status, CAST(o.amount AS REAL), o.product
+                                FROM orders o
+                                JOIN customers c ON o.customer_id = c.id
+                            """)
+                            o_rows = pg_cur.fetchall()
+                            if o_rows:
+                                cur.executemany("INSERT OR REPLACE INTO orders VALUES (?, ?, ?, ?, ?, ?)", o_rows)
+                            self._conn.commit()
+                            pg_loaded = True
+            except Exception:
+                pass
+
+            if not pg_loaded:
+                # Fallback to default mock seed
+                cur.executemany(
+                    "INSERT INTO customers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        (1001, 1001, "Alice Sharma", "alice@example.com", "9876543210", "12 Park Street, Bangalore", "5521 8839 1234", "ABCDE1234F", "Active"),
+                        (1008, 1008, "Priya Verma", "priya.verma@example.com", "9823456789", "45 Marine Drive, Mumbai", "6489 3127 5541", "BKLPY4321A", "Active"),
+                        (1042, 1042, "Rajesh Kumar", "rajesh.kumar@example.com", "9845123456", "77 Connaught Place, New Delhi", "9123 4567 8901", "BNZPK9988H", "Active"),
+                    ],
+                )
+                cur.executemany(
+                    "INSERT INTO orders VALUES (?, ?, ?, ?, ?, ?)",
+                    [
+                        (8211, 8211, 1008, "delivered", 45.00, '[{"item": "Wireless Earbuds", "qty": 1}]'),
+                        (4821, 4821, 1001, "shipped", 129.99, '[{"item": "Mechanical Keyboard", "qty": 1}]'),
+                        (4822, 4822, 1001, "delivered", 24.50, '[{"item": "Laptop Sleeve", "qty": 1}]'),
+                    ],
+                )
+                self._conn.commit()
 
     def search_by_email(self, email: str) -> Optional[dict[str, Any]]:
         with self._lock:

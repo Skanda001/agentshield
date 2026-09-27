@@ -12,6 +12,9 @@ if __name__ == "__main__":
 import random
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Make `app` importable when run as a script
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
