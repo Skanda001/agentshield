@@ -122,7 +122,7 @@ export default function Sidebar() {
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span className="text-slate-300">Gateway Active</span>
           </div>
-          <span className="text-[10px] text-slate-500 font-mono">:8002</span>
+          <span className="text-[10px] text-slate-500 font-mono">:8000</span>
         </div>
 
         <button

@@ -2,7 +2,7 @@ import { API_URL } from "./api";
 import type { DemoEvent } from "./demoApi";
 
 function wsBase(): string {
-  // http://localhost:8001 -> ws://localhost:8001
+  // http://localhost:8000 -> ws://localhost:8000
   return API_URL.replace(/^http/, "ws");
 }
 
