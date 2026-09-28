@@ -18,6 +18,24 @@ IMAP_PORT = 993
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 
+# Senders to skip — automated emails, newsletters, system mail
+SKIP_SENDER_PATTERNS = (
+    "no-reply",
+    "noreply",
+    "donotreply",
+    "do-not-reply",
+    "mailer-daemon",
+    "postmaster",
+    "notifications@",
+    "newsletter",
+    "unsubscribe",
+    "auto-confirm",
+    "support-noreply",
+    "github.com",
+    "vercel.com",
+    "render.com",
+)
+
 
 @dataclass
 class InboundEmail:
@@ -60,6 +78,15 @@ class GmailClient:
                     msg.get("Reply-To", msg.get("From", ""))
                 )[1]
                 subject = msg.get("Subject", "(no subject)")
+
+                # Skip automated / system emails
+                from_lower = from_addr.lower()
+                if from_lower == self.address.lower():
+                    log.info("⏭ Skipping self-sent email: %s", subject)
+                    continue
+                if any(p in from_lower for p in SKIP_SENDER_PATTERNS):
+                    log.info("⏭ Skipping automated sender (%s): %s", from_addr, subject)
+                    continue
 
                 # Extract plain-text body
                 body = ""
