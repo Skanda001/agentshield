@@ -49,7 +49,7 @@ function Landing() {
         <div className="flex items-center gap-4">
           {/* Fix #20: GitHub link */}
           <a
-            href="https://github.com/bsskaur/agentshield"
+            href="https://github.com/skanda001/agentshield"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-gray-400 hover:text-white flex items-center gap-1.5 transition-colors"
