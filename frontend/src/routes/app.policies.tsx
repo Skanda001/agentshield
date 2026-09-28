@@ -159,6 +159,8 @@ function PolicyCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const [showRaw, setShowRaw] = useState(false);
+
   const { data: versions = [] } = useQuery<PolicyVersion[]>({
     queryKey: ["policy-versions", policy.id],
     queryFn: async () =>
@@ -205,46 +207,63 @@ function PolicyCard({
             <div className="text-sm text-gray-500">Loading…</div>
           ) : (
             <>
-              <div className="text-xs text-gray-500 mb-3">
-                Document hash:{" "}
-                <span className="font-mono">{current.document_hash.slice(0, 16)}…</span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs text-gray-500">
+                  Document hash:{" "}
+                  <span className="font-mono">{current.document_hash.slice(0, 16)}…</span>
+                </div>
+                {/* Fix #16: Raw JSON view toggle */}
+                <button
+                  onClick={() => setShowRaw(!showRaw)}
+                  className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+                >
+                  {showRaw ? "View Rules" : "View Raw JSON"}
+                </button>
               </div>
-              <div className="space-y-2">
-                {current.document.rules.map((r, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-3 py-2 border-b border-border/40 last:border-0"
-                  >
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase flex-shrink-0 ${
-                        r.effect === "allow"
-                          ? "bg-success-soft text-success"
-                          : r.effect === "deny"
-                          ? "bg-danger-soft text-danger"
-                          : "bg-warn-soft text-warn"
-                      }`}
+
+              {showRaw ? (
+                <pre className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto max-h-80 overflow-y-auto">
+                  {JSON.stringify(current.document, null, 2)}
+                </pre>
+              ) : (
+                <div className="space-y-2">
+                  {current.document.rules.map((r, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 py-2 border-b border-border/40 last:border-0"
                     >
-                      {r.effect}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-mono text-xs">{r.name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        {[
-                          r.agent && `agent=${r.agent}`,
-                          r.role && `role=${r.role}`,
-                          r.action && `action=${r.action}`,
-                          r.resource && `resource=${r.resource}`,
-                          r.priority !== undefined &&
-                            r.priority !== 0 &&
-                            `priority=${r.priority}`,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "(matches everything)"}
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase flex-shrink-0 ${
+                          r.effect === "allow"
+                            ? "bg-success-soft text-success"
+                            : r.effect === "deny"
+                            ? "bg-danger-soft text-danger"
+                            : "bg-warn-soft text-warn"
+                        }`}
+                      >
+                        {r.effect}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-xs">{r.name}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {[
+                            r.agent && `agent=${r.agent}`,
+                            r.role && `role=${r.role}`,
+                            r.action && `action=${r.action}`,
+                            r.resource && `resource=${r.resource}`,
+                            r.priority !== undefined &&
+                              r.priority !== 0 &&
+                              `priority=${r.priority}`,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "(matches everything)"}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
+
             </>
           )}
         </div>

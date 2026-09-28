@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { ShieldCheck, ShieldX, AlertTriangle, UserCheck } from "lucide-react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { ShieldCheck, ShieldX, AlertTriangle, UserCheck, ChevronRight } from "lucide-react";
+import { useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import AuditStatusCard from "@/components/AuditStatusCard";
@@ -20,6 +21,7 @@ type Decision = {
   risk_score: number;
   created_at: string;
   reasons: string[];
+  arguments?: Record<string, unknown>;
 };
 
 type Approval = {
@@ -29,16 +31,21 @@ type Approval = {
 };
 
 function Dashboard() {
+  const [expandedDecisionId, setExpandedDecisionId] = useState<string | null>(null);
+
+  // Fix #9: limit=50 matches backend default; Fix #12: keepPreviousData prevents blank flash on refetch
   const { data: decisions = [] } = useQuery<Decision[]>({
     queryKey: ["decisions"],
-    queryFn: async () => (await api.get("/decisions?limit=200")).data,
+    queryFn: async () => (await api.get("/decisions?limit=50")).data,
     refetchInterval: 5000,
+    placeholderData: keepPreviousData,
   });
 
   const { data: approvals = [] } = useQuery<Approval[]>({
     queryKey: ["approvals-all"],
     queryFn: async () => (await api.get("/approvals?limit=500")).data,
     refetchInterval: 5000,
+    placeholderData: keepPreviousData,
   });
 
   const counts = {
@@ -62,12 +69,7 @@ function Dashboard() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          label="Allowed"
-          value={counts.allow}
-          color="success"
-          icon={ShieldCheck}
-        />
+        <StatCard label="Allowed" value={counts.allow} color="success" icon={ShieldCheck} />
         <StatCard
           label="Escalated"
           value={counts.escalate}
@@ -75,12 +77,7 @@ function Dashboard() {
           icon={AlertTriangle}
           subtitle={`${counts.pending} awaiting approval`}
         />
-        <StatCard
-          label="Blocked"
-          value={counts.block}
-          color="danger"
-          icon={ShieldX}
-        />
+        <StatCard label="Blocked" value={counts.block} color="danger" icon={ShieldX} />
         <StatCard
           label="Human Decisions"
           value={counts.approved + counts.denied}
@@ -105,14 +102,18 @@ function Dashboard() {
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <span className="font-semibold text-sm">Recent decisions</span>
+          {/* Fix #9: show all 50 */}
           <span className="text-xs text-gray-500">
-            showing latest {Math.min(25, decisions.length)} of {decisions.length}
+            showing latest {Math.min(50, decisions.length)} of {decisions.length}
           </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-gray-400 border-b border-border text-xs uppercase tracking-wide">
               <tr>
+                {/* Fix #11: expand chevron column */}
+                <th className="px-3 py-3 w-6" />
+                {/* Fix #10: date + time column */}
                 <th className="text-left px-5 py-3 font-medium">Time</th>
                 <th className="text-left px-5 py-3 font-medium">Tool</th>
                 <th className="text-left px-5 py-3 font-medium">Verdict</th>
@@ -121,58 +122,140 @@ function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {decisions.slice(0, 25).map((d) => {
+              {decisions.slice(0, 50).map((d) => {
                 const ap = approvalByDecision[d.id];
                 const reasons = d.reasons ?? [];
+                const isExpanded = expandedDecisionId === d.id;
                 const colorClass =
                   d.verdict === "BLOCK"
                     ? "text-danger/70"
                     : d.verdict === "ESCALATE"
                     ? "text-warn/70"
                     : "text-gray-500";
+
                 return (
-                  <tr
-                    key={d.id}
-                    className="border-b border-border/40 hover:bg-panel-hover transition-colors"
-                  >
-                    <td className="px-5 py-3 text-gray-500 font-mono text-xs align-top whitespace-nowrap">
-                      {new Date(d.created_at).toLocaleTimeString()}
-                    </td>
-                    <td className="px-5 py-3 align-top">
-                      <div className="font-mono text-xs">{d.tool}</div>
-                      {reasons.length > 0 && (
-                        <ul className="text-[11px] mt-1 space-y-0.5">
-                          {reasons.map((r, idx) => (
-                            <li key={idx} className={colorClass}>
-                              {r}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 align-top">
-                      <VerdictBadge verdict={d.verdict} />
-                    </td>
-                    <td className="px-5 py-3 align-top">
-                      {ap ? (
-                        <ApprovalBadge status={ap.status} />
-                      ) : (
-                        <span className="text-gray-700 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right text-xs text-gray-400 font-mono align-top">
-                      {Math.round(d.risk_score)}
-                    </td>
-                  </tr>
+                  <>
+                    {/* Fix #11: clickable row */}
+                    <tr
+                      key={d.id}
+                      onClick={() =>
+                        setExpandedDecisionId(isExpanded ? null : d.id)
+                      }
+                      className="border-b border-border/40 hover:bg-panel-hover transition-colors cursor-pointer select-none"
+                    >
+                      <td className="pl-3 pr-1 py-3 align-top text-gray-500">
+                        <ChevronRight
+                          size={14}
+                          className={`transition-transform duration-150 ${
+                            isExpanded ? "rotate-90" : ""
+                          }`}
+                        />
+                      </td>
+                      {/* Fix #10: date + time */}
+                      <td className="px-5 py-3 text-gray-500 font-mono text-xs align-top whitespace-nowrap">
+                        <div>
+                          {new Date(d.created_at).toLocaleDateString([], {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </div>
+                        <div className="text-[11px]">
+                          {new Date(d.created_at).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 align-top">
+                        <div className="font-mono text-xs">{d.tool}</div>
+                        {reasons.length > 0 && (
+                          <ul className="text-[11px] mt-1 space-y-0.5">
+                            {reasons.map((r, idx) => (
+                              <li key={idx} className={colorClass}>
+                                {r}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 align-top">
+                        <VerdictBadge verdict={d.verdict} />
+                      </td>
+                      <td className="px-5 py-3 align-top">
+                        {ap ? (
+                          <ApprovalBadge status={ap.status} />
+                        ) : (
+                          <span className="text-gray-700 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right text-xs text-gray-400 font-mono align-top">
+                        {Math.round(d.risk_score)}
+                      </td>
+                    </tr>
+
+                    {/* Fix #11: expandable detail row */}
+                    {isExpanded && (
+                      <tr
+                        key={`${d.id}-detail`}
+                        className="bg-slate-900/40 border-b border-border/40"
+                      >
+                        <td />
+                        <td colSpan={5} className="px-5 py-3">
+                          <div className="text-xs space-y-2">
+                            <div className="text-gray-400 font-mono text-[11px]">
+                              {new Date(d.created_at).toLocaleString()}
+                            </div>
+                            {reasons.length > 0 && (
+                              <div>
+                                <span className="text-gray-400 font-semibold uppercase tracking-wide text-[10px]">
+                                  Reasons
+                                </span>
+                                <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                                  {reasons.map((r, idx) => (
+                                    <li
+                                      key={idx}
+                                      className={`${colorClass} text-[11px]`}
+                                    >
+                                      {r}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {d.arguments &&
+                              Object.keys(d.arguments).length > 0 && (
+                                <div>
+                                  <span className="text-gray-400 font-semibold uppercase tracking-wide text-[10px]">
+                                    Arguments
+                                  </span>
+                                  <pre className="mt-1 text-[11px] text-gray-300 bg-slate-950 border border-slate-800 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
+                                    {JSON.stringify(d.arguments, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                            {reasons.length === 0 &&
+                              (!d.arguments ||
+                                Object.keys(d.arguments).length === 0) && (
+                                <span className="text-gray-600 text-[11px]">
+                                  No additional details available.
+                                </span>
+                              )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 );
               })}
               {decisions.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-5 py-12 text-center text-gray-500"
                   >
-                    No decisions yet. Click <b className="text-accent">Run demo</b> in the top bar.
+                    No decisions yet. Click{" "}
+                    <b className="text-accent">Run demo</b> in the top bar.
                   </td>
                 </tr>
               )}

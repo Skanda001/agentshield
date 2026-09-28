@@ -22,7 +22,10 @@ function Landing() {
     } catch (err: any) {
       console.error("Demo setup error:", err);
       const detail = err?.response?.data?.detail;
-      const msg = typeof detail === "string" ? detail : (err?.message || "Demo setup failed. Please try again.");
+      const msg =
+        typeof detail === "string"
+          ? detail
+          : err?.message || "Demo setup failed. Please try again.";
       setError(msg);
     } finally {
       setLoading(false);
@@ -44,7 +47,17 @@ function Landing() {
           <span className="font-bold text-lg">AgentShield</span>
         </div>
         <div className="flex items-center gap-4">
-          
+          {/* Fix #20: GitHub link */}
+          <a
+            href="https://github.com/bsskaur/agentshield"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-gray-400 hover:text-white flex items-center gap-1.5 transition-colors"
+          >
+            <Github className="w-4 h-4" />
+            <span className="hidden sm:inline">GitHub</span>
+          </a>
+
           {isAuthenticated ? (
             <Link to="/app" className="btn-primary text-sm">
               Go to Dashboard
@@ -109,21 +122,9 @@ function Landing() {
       {/* Stats */}
       <section className="relative z-10 max-w-6xl mx-auto px-6 pb-24">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Stat
-            value="94%"
-            label="Attack protection"
-            detail="50-attack red-team benchmark"
-          />
-          <Stat
-            value="0%"
-            label="False positives"
-            detail="On 100+ benign calls"
-          />
-          <Stat
-            value="66"
-            label="Tests passing"
-            detail="Unit + integration"
-          />
+          <Stat value="94%" label="Attack protection" detail="50-attack red-team benchmark" />
+          <Stat value="0%" label="False positives" detail="On 100+ benign calls" />
+          <Stat value="66" label="Tests passing" detail="Unit + integration" />
         </div>
       </section>
 
@@ -147,21 +148,24 @@ function Landing() {
       {/* Footer */}
       <footer className="relative z-10 max-w-6xl mx-auto px-6 py-12 border-t border-border text-sm text-gray-500 flex items-center justify-between">
         <div>Built with FastAPI · Postgres · React · LangGraph</div>
-        <div>© 2026 AgentShield</div>
+        <div className="flex items-center gap-4">
+          <a
+            href="https://github.com/bsskaur/agentshield"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white transition-colors flex items-center gap-1.5"
+          >
+            <Github className="w-4 h-4" />
+            Source
+          </a>
+          <span>© 2026 AgentShield</span>
+        </div>
       </footer>
     </div>
   );
 }
 
-function Stat({
-  value,
-  label,
-  detail,
-}: {
-  value: string;
-  label: string;
-  detail: string;
-}) {
+function Stat({ value, label, detail }: { value: string; label: string; detail: string }) {
   return (
     <div className="card card-hover p-6">
       <div className="text-4xl font-bold text-accent mb-2">{value}</div>

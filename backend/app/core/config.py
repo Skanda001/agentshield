@@ -68,7 +68,8 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> List[str]:
-        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        return origins if origins else ["*"]
 
     @field_validator("AGENTSHIELD_JWT_SECRET", "AUDIT_HMAC_SECRET", "API_KEY_HMAC_SECRET")
     @classmethod
@@ -76,6 +77,17 @@ class Settings(BaseSettings):
         if len(v) < 32:
             raise ValueError("secret must be at least 32 characters")
         return v
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse CORS_ORIGINS comma-separated string into a list.
+
+        Falls back to ["*"] when the list is empty so the backend never
+        hard-blocks the frontend due to a misconfigured env var.
+        Set CORS_ORIGINS explicitly in production to restrict access.
+        """
+        origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        return origins if origins else ["*"]
 
     @model_validator(mode="after")
     def _production_safety(self):

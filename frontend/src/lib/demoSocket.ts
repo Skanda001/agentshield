@@ -2,7 +2,8 @@ import { API_URL } from "./api";
 import type { DemoEvent } from "./demoApi";
 
 function wsBase(): string {
-  // http://localhost:8000 -> ws://localhost:8000
+  // API_URL is set via VITE_API_URL env var pointing to Render backend.
+  // Convert http(s) → ws(s) correctly.
   return API_URL.replace(/^http/, "ws");
 }
 
@@ -22,6 +23,26 @@ export function openDemoSocket(
   )}&token=${encodeURIComponent(token)}`;
 
   const ws = new WebSocket(url);
+
+  // Fix #1: If WebSocket fails to open within 5 seconds, call onDone so
+  // the UI doesn't get stuck in "running" state forever.
+  const openTimeout = setTimeout(() => {
+    if (ws.readyState === WebSocket.CONNECTING) {
+      handlers.onError(
+        "WebSocket connection timed out — events may arrive via HTTP fallback."
+      );
+      handlers.onDone();
+      try {
+        ws.close();
+      } catch {
+        // ignore
+      }
+    }
+  }, 5000);
+
+  ws.onopen = () => {
+    clearTimeout(openTimeout);
+  };
 
   ws.onmessage = (msg) => {
     let parsed: Record<string, unknown>;
@@ -43,6 +64,7 @@ export function openDemoSocket(
   };
 
   ws.onclose = (e) => {
+    clearTimeout(openTimeout);
     if (e.code === 4401) {
       handlers.onError("Session expired — please log in again.");
       localStorage.removeItem("token");
@@ -50,7 +72,10 @@ export function openDemoSocket(
   };
 
   ws.onerror = () => {
-    handlers.onError("WebSocket error");
+    clearTimeout(openTimeout);
+    handlers.onError("WebSocket connection error.");
+    // Fix #1: ensure UI is never stuck spinning after a WS error
+    handlers.onDone();
   };
 
   return ws;

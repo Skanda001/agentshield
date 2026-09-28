@@ -11,7 +11,8 @@ function Login() {
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [demoLoading, setDemoLoading] = useState(false);
+  const { login, tryDemo } = useAuth();
   const navigate = useNavigate();
 
   async function submit(e: React.FormEvent) {
@@ -25,6 +26,25 @@ function Login() {
       setError(err?.response?.data?.detail || "Invalid API key");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Fix #3: Try demo from login page
+  async function handleTryDemo() {
+    setError("");
+    setDemoLoading(true);
+    try {
+      await tryDemo();
+      navigate({ to: "/app" });
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setError(
+        typeof detail === "string"
+          ? detail
+          : err?.message || "Demo setup failed. Please try again."
+      );
+    } finally {
+      setDemoLoading(false);
     }
   }
 
@@ -55,9 +75,7 @@ function Login() {
           </p>
 
           <form onSubmit={submit}>
-            <label className="block text-sm text-gray-300 mb-2">
-              API Key
-            </label>
+            <label className="block text-sm text-gray-300 mb-2">API Key</label>
             <input
               type="password"
               value={apiKey}
@@ -81,6 +99,20 @@ function Login() {
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
+
+          {/* Fix #3: Try demo button on login page */}
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-xs text-gray-500 text-center mb-3">
+              Don't have an API key?
+            </p>
+            <button
+              onClick={handleTryDemo}
+              disabled={demoLoading}
+              className="btn-ghost w-full py-2.5 text-sm"
+            >
+              {demoLoading ? "Setting up demo…" : "Try Demo — No signup needed"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

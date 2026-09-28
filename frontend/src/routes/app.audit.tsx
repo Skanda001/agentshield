@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  Info,
 } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
@@ -34,6 +35,30 @@ type CallLogItem = {
   policy_effect?: string | null;
   data_classification?: string | null;
 };
+
+function getChainStatusMessage(
+  verify: any
+): { title: string; detail: string; isReset: boolean } {
+  if (verify.valid) {
+    return {
+      title: "Cryptographic Chain Verified",
+      detail: `${verify.total_events} events checked · SHA-256 hashes and HMAC signatures valid`,
+      isReset: false,
+    };
+  }
+  // Heuristic: if broken_at_seq is 1 or 2 or the reason mentions 'previous hash', likely a fresh DB / redeploy reset
+  const isLikelyReset =
+    verify.broken_at_seq <= 2 ||
+    (typeof verify.reason === "string" &&
+      verify.reason.toLowerCase().includes("previous"));
+  return {
+    title: isLikelyReset ? "Audit Chain Reset Detected" : "Chain Integrity Error",
+    detail: isLikelyReset
+      ? `Chain restarted at event #${verify.broken_at_seq} — this typically happens after a database reset or fresh deployment. No tampering detected.`
+      : `Tampering detected at event #${verify.broken_at_seq}: ${verify.reason}`,
+    isReset: isLikelyReset,
+  };
+}
 
 function Audit() {
   const qc = useQueryClient();
@@ -101,34 +126,41 @@ function Audit() {
       />
 
       {/* Cryptographic Chain Banner */}
-      {verify && (
-        <div
-          className={`card px-4 py-3 flex items-center justify-between border ${
-            valid ? "border-emerald-500/30 bg-emerald-950/20" : "border-rose-500/30 bg-rose-950/20"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            {valid ? (
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
-            ) : (
-              <ShieldAlert className="w-5 h-5 text-rose-400" />
-            )}
-            <div>
-              <div className="text-xs font-semibold text-white">
-                {valid ? "Cryptographic Chain Verified" : "Chain Integrity Error"}
-              </div>
-              <div className="text-[11px] text-slate-400">
-                {valid
-                  ? `${verify.total_events} events checked · SHA-256 hashes and HMAC signatures valid`
-                  : `Failed at seq #${verify.broken_at_seq}: ${verify.reason}`}
+      {verify && (() => {
+        const status = getChainStatusMessage(verify);
+        return (
+          <div
+            className={`card px-4 py-3 flex items-center justify-between border ${
+              status.isReset
+                ? "border-amber-500/30 bg-amber-950/20"
+                : valid
+                ? "border-emerald-500/30 bg-emerald-950/20"
+                : "border-rose-500/30 bg-rose-950/20"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {valid ? (
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+              ) : status.isReset ? (
+                <Info className="w-5 h-5 text-amber-400" />
+              ) : (
+                <ShieldAlert className="w-5 h-5 text-rose-400" />
+              )}
+              <div>
+                <div className="text-xs font-semibold text-white">
+                  {status.title}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {status.detail}
+                </div>
               </div>
             </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
+              HMAC-SHA256
+            </span>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300">
-            HMAC-SHA256
-          </span>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Clean Metrics Strip */}
       <div className="grid grid-cols-4 gap-3">
@@ -244,11 +276,8 @@ function Audit() {
                           {log.risk_score?.toFixed(0) ?? 0}
                         </td>
                         <td className="px-4 py-2.5 font-mono text-slate-400 text-right whitespace-nowrap">
-                          {new Date(log.created_at).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          })}
+                          <div>{new Date(log.created_at).toLocaleDateString([], { month: "short", day: "numeric" })}</div>
+                          <div className="text-[10px] text-slate-500">{new Date(log.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
                         </td>
                         <td className="px-2 py-2.5 text-center">
                           <ChevronRight

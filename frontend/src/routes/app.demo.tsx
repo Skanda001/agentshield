@@ -510,12 +510,36 @@ function DemoPage() {
               )}
             </div>
 
+            {running && events.length === 0 && (
+              <div className="space-y-2 animate-pulse">
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-14 rounded-lg bg-slate-800/60 border border-slate-800"
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Fix #8: Loading skeleton while waiting for first event */}
+            {running && events.length === 0 && (
+              <div className="space-y-2 animate-pulse">
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-14 rounded-lg bg-slate-800/60 border border-slate-800"
+                  />
+                ))}
+              </div>
+            )}
+
             <DemoEventStream
               events={events}
               selectedId={selectedId}
               onSelect={setSelectedId}
               running={running}
             />
+
           </div>
         </div>
 

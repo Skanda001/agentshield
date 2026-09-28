@@ -22,11 +22,20 @@ type KillSwitchRow = {
   deactivated_at: string | null;
 };
 
+type PendingActivation = {
+  scope: string;
+  target_id: string | null;
+  reason: string;
+};
+
 function KillSwitch() {
   const qc = useQueryClient();
   const [globalReason, setGlobalReason] = useState("Manual activation via UI");
   const [toolName, setToolName] = useState("send_email");
   const [toolReason, setToolReason] = useState("Tool disabled for security review");
+
+  // Fix #15: confirmation state before firing activate
+  const [pendingActivation, setPendingActivation] = useState<PendingActivation | null>(null);
 
   const { data: switches = [] } = useQuery<KillSwitchRow[]>({
     queryKey: ["kill-switches"],
@@ -88,9 +97,10 @@ function KillSwitch() {
           className="w-full px-3 py-2 bg-bg border border-border rounded-lg mb-3 text-sm focus:border-danger focus:outline-none"
         />
 
+        {/* Fix #15: open confirmation modal instead of directly activating */}
         <button
           onClick={() =>
-            activate.mutate({
+            setPendingActivation({
               scope: "global",
               target_id: null,
               reason: globalReason,
@@ -100,7 +110,7 @@ function KillSwitch() {
           className="btn-danger"
         >
           <Zap className="w-4 h-4" />
-          {activate.isPending ? "Activating…" : "Activate Global Freeze"}
+          Activate Global Freeze
         </button>
       </div>
 
@@ -136,9 +146,10 @@ function KillSwitch() {
           </div>
         </div>
 
+        {/* Fix #15: open confirmation modal */}
         <button
           onClick={() =>
-            activate.mutate({
+            setPendingActivation({
               scope: "tool",
               target_id: toolName.trim(),
               reason: toolReason,
@@ -150,7 +161,7 @@ function KillSwitch() {
           className="btn-ghost border-warn/40 text-warn hover:bg-warn-soft"
         >
           <PowerOff className="w-4 h-4" />
-          {activate.isPending ? "Activating…" : "Disable tool"}
+          Disable tool
         </button>
       </div>
 
@@ -261,6 +272,58 @@ function KillSwitch() {
           </table>
         </div>
       </div>
+
+      {/* Fix #15: Confirmation modal */}
+      {pendingActivation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#0c121e] border border-rose-500/40 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl animate-slide-up">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-danger-soft flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-danger" />
+              </div>
+              <div>
+                <div className="font-semibold text-white">
+                  Confirm Activation
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5">
+                  This will immediately affect all active agents
+                </div>
+              </div>
+            </div>
+            <div className="text-sm text-gray-300 mb-2">
+              Scope:{" "}
+              <span className="font-mono text-white">
+                {pendingActivation.scope}
+                {pendingActivation.target_id
+                  ? `: ${pendingActivation.target_id}`
+                  : ""}
+              </span>
+            </div>
+            <div className="text-sm text-gray-300 mb-5">
+              Reason:{" "}
+              <span className="text-white">{pendingActivation.reason}</span>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  activate.mutate(pendingActivation);
+                  setPendingActivation(null);
+                }}
+                disabled={activate.isPending}
+                className="btn-danger flex-1"
+              >
+                Confirm Activation
+              </button>
+              <button
+                onClick={() => setPendingActivation(null)}
+                className="btn-ghost flex-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -1,4 +1,7 @@
 """The gateway endpoint: evaluate a tool call and return a verdict."""
+from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,13 +37,28 @@ async def decide(
 @router.get("/decisions", response_model=list[DecisionOut])
 async def list_decisions(
     limit: int = 50,
+    before: Optional[str] = None,
     agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Decision)
-        .where(Decision.agent_id == agent.id)
-        .order_by(Decision.created_at.desc())
-        .limit(max(1, min(limit, 200)))
-    )
-    return list(result.scalars().all())
+    """List decisions for the current agent, newest first.
+
+    Args:
+        limit: Maximum rows to return (1–200).
+        before: ISO 8601 datetime cursor — only return decisions created before this timestamp.
+                Enables cursor-based pagination: pass the created_at of the last row received
+                to fetch the next page.
+    """
+    query = select(Decision).where(Decision.agent_id == agent.id)
+
+    # Fix #23: cursor-based pagination
+    if before:
+        try:
+            before_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))
+            query = query.where(Decision.created_at < before_dt)
+        except ValueError:
+            pass  # ignore malformed cursor, return from beginning
+
+    query = query.order_by(Decision.created_at.desc()).limit(max(1, min(limit, 200)))
+    result = await db.execute(query)
+    return list(result.scalars().all())

@@ -28,7 +28,18 @@ type Approval = {
 };
 
 const TABS = ["pending", "approved", "denied", "all"] as const;
-type Tab = typeof TABS[number];
+type Tab = (typeof TABS)[number];
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+}
 
 function Approvals() {
   const qc = useQueryClient();
@@ -65,6 +76,8 @@ function Approvals() {
     },
   });
 
+  const pendingApprovals = approvals.filter((a) => a.status === "pending");
+
   return (
     <>
       <PageHeader
@@ -79,12 +92,15 @@ function Approvals() {
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium relative transition-colors ${
-              tab === t
-                ? "text-white"
-                : "text-gray-500 hover:text-gray-300"
+              tab === t ? "text-white" : "text-gray-500 hover:text-gray-300"
             }`}
           >
             {t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === "pending" && pendingApprovals.length > 0 && tab !== "pending" && (
+              <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-mono">
+                {pendingApprovals.length}
+              </span>
+            )}
             {tab === t && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-t" />
             )}
@@ -106,13 +122,46 @@ function Approvals() {
         />
       ) : (
         <div className="space-y-3">
+          {/* Fix #13: Bulk approve/deny bar */}
+          {tab === "pending" && approvals.length > 1 && (
+            <div className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-800">
+              <span className="text-xs text-slate-400">
+                {approvals.length} pending — bulk action:
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() =>
+                    approvals.forEach((a) =>
+                      decide.mutate({ id: a.id, approved: true })
+                    )
+                  }
+                  disabled={decide.isPending}
+                  className="btn-ghost border-success/40 text-success hover:bg-success-soft text-xs py-1 px-3 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Approve All
+                </button>
+                <button
+                  onClick={() =>
+                    approvals.forEach((a) =>
+                      decide.mutate({ id: a.id, approved: false })
+                    )
+                  }
+                  disabled={decide.isPending}
+                  className="btn-ghost border-danger/40 text-danger hover:bg-danger-soft text-xs py-1 px-3 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  Deny All
+                </button>
+              </div>
+            </div>
+          )}
+
           {approvals.map((a) => (
             <ApprovalCard
               key={a.id}
               approval={a}
-              onDecide={(approved) =>
-                decide.mutate({ id: a.id, approved })
-              }
+              onDecide={(approved) => decide.mutate({ id: a.id, approved })}
               deciding={decide.isPending}
             />
           ))}
@@ -176,12 +225,18 @@ function ApprovalCard({
               </ul>
             )}
 
-          {approval.decided_by && (
-            <div className="text-xs text-gray-500 mt-3">
-              Decided by <span className="text-gray-300">{approval.decided_by}</span>
-              {approval.decision_note && ` — ${approval.decision_note}`}
-            </div>
-          )}
+          <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
+            {approval.decided_by && (
+              <span>
+                Decided by{" "}
+                <span className="text-gray-300">{approval.decided_by}</span>
+                {approval.decision_note && ` — ${approval.decision_note}`}
+              </span>
+            )}
+            <span className="text-gray-600">
+              {relativeTime(approval.created_at)}
+            </span>
+          </div>
         </div>
 
         {approval.status === "pending" && (
