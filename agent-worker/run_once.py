@@ -91,6 +91,12 @@ def main() -> None:
 
     os.environ["AGENTSHIELD_API_KEY"] = api_key
 
+    # shield.py reads DEFAULT_API_KEY at module import time.
+    # Always patch the singleton so @protect uses the correct key.
+    import shield as _shield_mod
+    _shield_mod._default_client.api_key = api_key
+    _shield_mod._default_client.token = None  # force fresh token fetch
+
     scenario = pick_scenario()
     log.info("─" * 60)
     log.info("Scenario │ %s", scenario["label"])
