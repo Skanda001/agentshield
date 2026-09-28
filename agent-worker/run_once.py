@@ -1,6 +1,9 @@
 """
-Single-shot runner — used by GitHub Actions cron.
-Picks ONE random scenario, runs it through AgentShield, then exits.
+AgentShield — GitHub Actions runner.
+
+Priority:
+  1. Check Gmail for unread emails → process each with the real LLM email agent
+  2. If inbox is empty → run one random scenario (keeps dashboard alive)
 """
 from __future__ import annotations
 
@@ -11,12 +14,6 @@ import sys
 import time
 import urllib.request
 
-# Add agent-worker dir to path when called from repo root
-sys.path.insert(0, os.path.dirname(__file__))
-
-from agent import CustomerSupportAgent
-from scenarios import pick_scenario
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -24,99 +21,164 @@ logging.basicConfig(
 )
 log = logging.getLogger("run-once")
 
-AGENTSHIELD_URL = os.getenv("AGENTSHIELD_URL", "http://localhost:8000").rstrip("/")
+AGENTSHIELD_URL   = os.getenv("AGENTSHIELD_URL", "http://localhost:8000").rstrip("/")
 AGENTSHIELD_API_KEY = os.getenv("AGENTSHIELD_API_KEY", "")
+GMAIL_ADDRESS     = os.getenv("GMAIL_ADDRESS", "")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
+
+
+# ── Credentials ───────────────────────────────────────────────────────────────
+
+def _post(path: str, body: dict, token: str = "") -> dict:
+    headers: dict = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(
+        f"{AGENTSHIELD_URL}/api/v1{path}",
+        data=json.dumps(body).encode(),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read())
 
 
 def provision_credentials() -> str:
-    """Auto-provision a tenant+agent and return API key."""
     suffix = str(int(time.time()))[-6:]
-
-    def post(path: str, body: dict) -> dict:
-        req = urllib.request.Request(
-            f"{AGENTSHIELD_URL}/api/v1{path}",
-            data=json.dumps(body).encode(),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=20) as r:
-            return json.loads(r.read())
-
-    tenant = post("/tenants", {"name": f"GH Worker {suffix}", "slug": f"gh-worker-{suffix}"})
-    agent_data = post("/agents", {
+    tenant = _post("/tenants", {"name": f"Email Agent {suffix}", "slug": f"email-agent-{suffix}"})
+    ag = _post("/agents", {
         "tenant_id": tenant["id"],
-        "name": "GitHub Actions Email Agent",
+        "name": "Autonomous Email Support Agent",
         "role": "support",
         "scopes": ["read:order", "read:customer", "write:refund", "write:email"],
     })
-    api_key: str = agent_data["api_key"]
-
+    api_key: str = ag["api_key"]
     log.info("━" * 60)
-    log.info("✅ Provisioned new agent.")
-    log.info("   Add this as GitHub secret AGENTSHIELD_API_KEY:")
-    log.info("   %s", api_key)
+    log.info("✅ Provisioned. Set AGENTSHIELD_API_KEY = %s", api_key)
     log.info("━" * 60)
-
-    # Load demo policy (best-effort)
     try:
-        token_res = post("/agents/token", {"api_key": api_key})
-        jwt = token_res.get("access_token", "")
-        req = urllib.request.Request(
-            f"{AGENTSHIELD_URL}/api/v1/policies/load-yaml?tenant_id={tenant['id']}&file_path=policies/demo.yaml",
-            data=b"{}",
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {jwt}"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=10):
-            pass
+        tok = _post("/agents/token", {"api_key": api_key})
+        _post(f"/policies/load-yaml?tenant_id={tenant['id']}&file_path=policies/demo.yaml",
+              {}, token=tok.get("access_token", ""))
         log.info("✅ Demo policy loaded")
     except Exception as e:
         log.warning("Policy load skipped: %s", e)
-
     return api_key
 
 
-def main() -> None:
-    log.info("🛡️  AgentShield — GitHub Actions single-shot run")
-    log.info("   Gateway: %s", AGENTSHIELD_URL)
+def resolve_api_key() -> str:
+    key = AGENTSHIELD_API_KEY
+    if not key:
+        log.info("No AGENTSHIELD_API_KEY — provisioning…")
+        for attempt in range(5):
+            try:
+                return provision_credentials()
+            except Exception as exc:
+                wait = 15 * (attempt + 1)
+                log.warning("Attempt %d failed: %s. Retry in %ds", attempt + 1, exc, wait)
+                time.sleep(wait)
+        log.error("Could not provision credentials")
+        sys.exit(1)
+    return key
 
-    api_key = AGENTSHIELD_API_KEY
-    if not api_key:
-        log.info("AGENTSHIELD_API_KEY not set — provisioning once…")
-        try:
-            api_key = provision_credentials()
-        except Exception as exc:
-            log.error("❌ Provision failed: %s", exc)
-            sys.exit(1)
 
+def patch_shield(api_key: str) -> None:
+    """Override the shield module's singleton client with the correct API key."""
     os.environ["AGENTSHIELD_API_KEY"] = api_key
+    import shield as _s
+    _s._default_client.api_key = api_key
+    _s._default_client.token   = None
 
-    # shield.py reads DEFAULT_API_KEY at module import time.
-    # Always patch the singleton so @protect uses the correct key.
-    import shield as _shield_mod
-    _shield_mod._default_client.api_key = api_key
-    _shield_mod._default_client.token = None  # force fresh token fetch
+
+# ── Email mode ────────────────────────────────────────────────────────────────
+
+def run_email_mode() -> int:
+    """
+    Fetch unread emails from Gmail and process each one.
+    Returns the number of emails processed.
+    """
+    from email_client import GmailClient
+    from email_agent  import EmailSupportAgent
+
+    gmail = GmailClient(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
+    try:
+        emails = gmail.fetch_unread()
+    except Exception as exc:
+        log.error("Gmail fetch failed: %s", exc)
+        return 0
+
+    if not emails:
+        log.info("📭 No unread emails in inbox")
+        return 0
+
+    agent = EmailSupportAgent()
+
+    for mail in emails:
+        log.info("─" * 60)
+        result = agent.process(mail)
+        verdict = result.get("verdict", "?")
+        reply   = result.get("reply", "")
+
+        # Send the reply back to the sender
+        try:
+            gmail.send_reply(
+                to      = mail.reply_to or mail.from_addr,
+                subject = mail.subject,
+                body    = reply,
+            )
+        except Exception as exc:
+            log.error("Failed to send reply: %s", exc)
+
+        log.info("✔ Email processed | verdict=%s | replied_to=%s",
+                 verdict, mail.reply_to or mail.from_addr)
+
+    return len(emails)
+
+
+# ── Scenario fallback mode ────────────────────────────────────────────────────
+
+def run_scenario_mode() -> None:
+    """Run one random scenario to keep the dashboard active."""
+    from agent     import CustomerSupportAgent
+    from scenarios import pick_scenario
 
     scenario = pick_scenario()
     log.info("─" * 60)
+    log.info("📋 Scenario fallback (no emails)")
     log.info("Scenario │ %s", scenario["label"])
     log.info("Prompt   │ %s", scenario["prompt"])
 
     try:
-        agent = CustomerSupportAgent()
+        agent  = CustomerSupportAgent()
         result = agent.run(scenario["prompt"])
         verdict = result.get("verdict", "?")
         tool    = result.get("tool", "?")
         icon    = {"ALLOW": "✅", "BLOCK": "⛔", "HITL": "⚠️ "}.get(verdict, "❓")
-
         log.info("%s %-8s │ tool=%s", icon, verdict, tool)
-        if verdict in ("BLOCK", "HITL"):
-            log.info("         │ %s", str(result.get("reason", ""))[:120])
-
-        log.info("✔ Done — decision recorded in AgentShield dashboard")
     except Exception as exc:
-        log.error("❌ Agent error: %s", exc)
-        sys.exit(1)
+        log.error("Scenario error: %s", exc)
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+def main() -> None:
+    log.info("🛡️  AgentShield Email Agent — GitHub Actions run")
+    log.info("   Gateway : %s", AGENTSHIELD_URL)
+    log.info("   Gmail   : %s", GMAIL_ADDRESS or "(not configured)")
+
+    api_key = resolve_api_key()
+    patch_shield(api_key)
+
+    if GMAIL_ADDRESS and GMAIL_APP_PASSWORD:
+        processed = run_email_mode()
+        if processed == 0:
+            # No real emails — still keep dashboard alive with a scenario
+            run_scenario_mode()
+    else:
+        log.info("Gmail credentials not set — running scenario mode only")
+        run_scenario_mode()
+
+    log.info("✔ Done")
 
 
 if __name__ == "__main__":
