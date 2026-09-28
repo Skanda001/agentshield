@@ -1,0 +1,36 @@
+name: AgentShield Autonomous Email Worker
+
+on:
+  # Runs every 10 minutes — creates live dashboard activity 24/7
+  schedule:
+    - cron: "*/10 * * * *"
+
+  # Also allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  run-agent:
+    name: Run Email Support Scenario
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: agent-worker/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r agent-worker/requirements.txt
+
+      - name: Run one agent scenario → AgentShield
+        env:
+          AGENTSHIELD_URL: ${{ secrets.AGENTSHIELD_URL }}
+          AGENTSHIELD_API_KEY: ${{ secrets.AGENTSHIELD_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python agent-worker/run_once.py
