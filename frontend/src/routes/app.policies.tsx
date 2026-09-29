@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { FileText, Plus, ChevronRight } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
+import PolicySimulator from "@/components/PolicySimulator";
 import EmptyState from "@/components/EmptyState";
 import LoadingState from "@/components/LoadingState";
 import { api } from "@/lib/api";
@@ -93,6 +94,9 @@ function Policies() {
         title="Policies"
         description="Rules that decide allow / block / escalate for every tool call."
       />
+
+      {/* Interactive Policy Simulator */}
+      <PolicySimulator />
 
       {/* Load YAML */}
       <div className="card p-5 mb-6">
