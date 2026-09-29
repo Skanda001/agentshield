@@ -116,26 +116,97 @@ class CRMStore:
                 pass
 
             if not pg_loaded:
-                # Seed Customers
-                customers = [
-                    (1001, 1001, "Alice Sharma", "alice@example.com", "9876543210", "12 Park Street, Bangalore", "5521 8839 1234", "ABCDE1234F", "Active", 1),
-                    (1008, 1008, "Priya Verma", "priya.verma@example.com", "9823456789", "45 Marine Drive, Mumbai", "6489 3127 5541", "BKLPY4321A", "Active", 0),
-                    (1042, 1042, "Rajesh Kumar", "rajesh.kumar@example.com", "9845123456", "77 Connaught Place, New Delhi", "9123 4567 8901", "BNZPK9988H", "Active", 1),
-                    (1015, 1015, "Lopa Bhagat", "lopa.bhagat@example.com", "9711223344", "88 MG Road, Pune", "4412 9988 3322", "XYZPA7766Q", "Active", 0),
-                    (1099, 1099, "Vikram Malhotra", "vikram.m@example.com", "9900112233", "201 Banjara Hills, Hyderabad", "7890 1234 5678", "MNOPQ5678R", "Active", 1),
+                # Seed all customers and orders from 1000 to 2000 inclusive
+                FIRST_NAMES = [
+                    "Aarav", "Aditi", "Alice", "Amit", "Ananya", "Anil", "Arjun", "Deepak",
+                    "Divya", "Gaurav", "Karan", "Kavita", "Kiran", "Lopa", "Manoj", "Meera",
+                    "Mohit", "Neha", "Nikhil", "Pooja", "Pradeep", "Priya", "Rahul", "Rajesh",
+                    "Rakesh", "Riya", "Rohan", "Rohit", "Sameer", "Sanjay", "Shreya", "Sneha",
+                    "Suresh", "Swati", "Tarun", "Varun", "Vikram", "Vikas", "Vishal", "Yash"
                 ]
+                LAST_NAMES = [
+                    "Agarwal", "Bansal", "Bhagat", "Bose", "Chawla", "Chopra", "Das", "Deshmukh",
+                    "Dutta", "Gupta", "Iyer", "Jain", "Joshi", "Kapoor", "Kaur", "Khanna",
+                    "Kumar", "Malhotra", "Mehta", "Mishra", "Mukherjee", "Nair", "Patel",
+                    "Prasad", "Rao", "Reddy", "Saxena", "Sen", "Sharma", "Singh", "Sinha",
+                    "Trivedi", "Varma", "Verma", "Yadav"
+                ]
+                STREETS = [
+                    "MG Road", "Park Street", "Marine Drive", "Connaught Place", "Banjara Hills",
+                    "Anna Salai", "FC Road", "Sector 17", "Civil Lines", "Hazratganj",
+                    "Indiranagar", "Koramangala", "Juhu", "Hauz Khas", "Alwarpet"
+                ]
+                CITIES = [
+                    "Bengaluru", "Kolkata", "Mumbai", "New Delhi", "Hyderabad",
+                    "Chennai", "Pune", "Chandigarh", "Jaipur", "Lucknow"
+                ]
+                PRODUCTS = [
+                    ("Wireless Noise-Canceling Headphones", 89.99),
+                    ("Mechanical Keyboard", 129.99),
+                    ("Ergonomic Office Chair", 199.50),
+                    ("Ultra-wide Monitor 27-inch", 349.00),
+                    ("Smart Fitness Watch", 79.95),
+                    ("USB-C Docking Station", 59.99),
+                    ("Wireless Gaming Mouse", 49.50),
+                    ("Noise-Isolating Earbuds", 39.99),
+                    ("Laptop Sleeve 15-inch", 24.50),
+                    ("Aluminium Laptop Stand", 34.00)
+                ]
+
+                PRESET_CUSTOMERS = {
+                    1001: ("Alice Sharma", "alice@example.com", "9876543210", "12 Park Street, Bangalore", "5521 8839 1234", "ABCDE1234F", "Active", 1),
+                    1003: ("Rohan Mehta", "rohan.mehta@example.com", "9811223344", "88 MG Road, Bengaluru", "4412 8899 3321", "CGHPR5522K", "Active", 0),
+                    1008: ("Priya Verma", "priya.verma@example.com", "9823456789", "45 Marine Drive, Mumbai", "6489 3127 5541", "BKLPY4321A", "Active", 0),
+                    1015: ("Lopa Bhagat", "lopa.bhagat@example.com", "9711223344", "88 MG Road, Pune", "4412 9988 3322", "XYZPA7766Q", "Active", 0),
+                    1042: ("Rajesh Kumar", "rajesh.kumar@example.com", "9845123456", "77 Connaught Place, New Delhi", "9123 4567 8901", "BNZPK9988H", "Active", 1),
+                    1099: ("Vikram Malhotra", "vikram.m@example.com", "9900112233", "201 Banjara Hills, Hyderabad", "7890 1234 5678", "MNOPQ5678R", "Active", 1),
+                }
+
+                PRESET_ORDERS = {
+                    1008: [(8211, 8211, 1008, "delivered", 45.00, '[{"item": "Wireless Earbuds", "qty": 1, "price": 45.00}]', "2026-09-20T10:15:00Z")],
+                    1001: [
+                        (4821, 4821, 1001, "shipped", 129.99, '[{"item": "Mechanical Keyboard", "qty": 1, "price": 129.99}]', "2026-09-22T14:30:00Z"),
+                        (4822, 4822, 1001, "delivered", 24.50, '[{"item": "Laptop Sleeve", "qty": 1, "price": 24.50}]', "2026-09-15T09:00:00Z"),
+                    ],
+                    1003: [(5501, 5501, 1003, "delivered", 89.99, '[{"item": "Wireless Noise-Canceling Headphones", "qty": 1, "price": 89.99}]', "2026-09-24T11:00:00Z")],
+                    1042: [(9301, 9301, 1042, "processing", 299.00, '[{"item": "Noise-Cancelling Headphones", "qty": 1, "price": 299.00}]', "2026-09-24T18:45:00Z")],
+                }
+
+                import json
+                customers = []
+                orders = []
+
+                for cid in range(1000, 2001):
+                    if cid in PRESET_CUSTOMERS:
+                        name, email, phone, addr, aadh, pan, status, is_vip = PRESET_CUSTOMERS[cid]
+                    else:
+                        fn = FIRST_NAMES[cid % len(FIRST_NAMES)]
+                        ln = LAST_NAMES[(cid * 7 + cid // 11) % len(LAST_NAMES)]
+                        name = f"{fn} {ln}"
+                        email = f"{fn.lower()}.{ln.lower()}{cid}@example.com"
+                        phone = f"98{str(cid).zfill(4)}{str((cid * 137 + 101) % 9000 + 1000)}"
+                        addr = f"{(cid * 17 + 3) % 350 + 1} {STREETS[cid % len(STREETS)]}, {CITIES[(cid * 3) % len(CITIES)]}"
+                        aadh = f"{str((cid * 1111 + 31) % 9000 + 1000)} {str((cid * 2345 + 53) % 9000 + 1000)} {str((cid * 3456 + 79) % 9000 + 1000)}"
+                        prefix = ["ABC", "BNZ", "CGH", "DFK", "ERT", "FGH", "GHI", "JKL", "MNP", "PRT"][(cid * 3) % 10]
+                        pan = f"{prefix}P{ln[0].upper()}{(cid * 73 + 17) % 9000 + 1000}{chr(65 + ((cid * 13 + 5) % 26))}"
+                        status = "Active"
+                        is_vip = 1 if cid % 10 == 0 else 0
+
+                    customers.append((cid, cid, name, email, phone, addr, aadh, pan, status, is_vip))
+
+                    if cid in PRESET_ORDERS:
+                        orders.extend(PRESET_ORDERS[cid])
+                    else:
+                        prod, price = PRODUCTS[cid % len(PRODUCTS)]
+                        order_id = 5000 + (cid - 1000)
+                        order_status = "delivered" if cid % 3 == 0 else ("shipped" if cid % 3 == 1 else "processing")
+                        items_json = json.dumps([{"item": prod, "qty": 1, "price": price}])
+                        orders.append((order_id, order_id, cid, order_status, price, items_json, "2026-09-24T12:00:00Z"))
+
                 cur.executemany(
                     "INSERT OR IGNORE INTO customers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     customers,
                 )
-
-                # Seed Orders
-                orders = [
-                    (8211, 8211, 1008, "delivered", 45.00, '[{"item": "Wireless Earbuds", "qty": 1, "price": 45.00}]', "2026-09-20T10:15:00Z"),
-                    (4821, 4821, 1001, "shipped", 129.99, '[{"item": "Mechanical Keyboard", "qty": 1, "price": 129.99}]', "2026-09-22T14:30:00Z"),
-                    (4822, 4822, 1001, "delivered", 24.50, '[{"item": "Laptop Sleeve", "qty": 1, "price": 24.50}]', "2026-09-15T09:00:00Z"),
-                    (9301, 9301, 1042, "processing", 299.00, '[{"item": "Noise-Cancelling Headphones", "qty": 1, "price": 299.00}]', "2026-09-24T18:45:00Z"),
-                ]
                 cur.executemany(
                     "INSERT OR IGNORE INTO orders VALUES (?, ?, ?, ?, ?, ?, ?)",
                     orders,
@@ -174,10 +245,16 @@ class CRMStore:
                 return None
             return {
                 "found": True,
+                "id": str(row["id"]),
                 "display_id": row["display_id"],
                 "name": row["name"],
                 "email": row["email"],
+                "phone": row["phone"],
+                "address": row["address"],
+                "aadhaar": row["aadhaar"],
+                "pan": row["pan"],
                 "account_status": row["account_status"],
+                "is_vip": bool(row["is_vip"]),
             }
 
     def get_customer_by_id(self, customer_id: int) -> Optional[dict[str, Any]]:

@@ -58,6 +58,10 @@ class DecisionOut(BaseModel):
     risk_score: float
     reasons: list[str]
     policy_rule: Optional[str] = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    note: Optional[str] = None
+    injection_score: float = 0.0
+    pii_labels: list[str] = Field(default_factory=list)
     masked: bool = False
     created_at: datetime
 

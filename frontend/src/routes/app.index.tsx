@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ShieldCheck, ShieldX, AlertTriangle, UserCheck, ChevronRight } from "lucide-react";
+import { ShieldCheck, ShieldX, AlertTriangle, UserCheck, ChevronRight, Sparkles, Terminal, Shield } from "lucide-react";
 import { useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
@@ -22,6 +22,11 @@ type Decision = {
   created_at: string;
   reasons: string[];
   arguments?: Record<string, unknown>;
+  note?: string;
+  policy_rule?: string;
+  injection_score?: number;
+  pii_labels?: string[];
+  masked?: boolean;
 };
 
 type Approval = {
@@ -168,16 +173,18 @@ function Dashboard() {
                         </div>
                       </td>
                       <td className="px-5 py-3 align-top">
-                        <div className="font-mono text-xs">{d.tool}</div>
-                        {reasons.length > 0 && (
-                          <ul className="text-[11px] mt-1 space-y-0.5">
-                            {reasons.map((r, idx) => (
-                              <li key={idx} className={colorClass}>
-                                {r}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                        <div className="font-mono text-xs font-semibold text-slate-200">
+                          {d.tool}
+                        </div>
+                        {d.policy_rule ? (
+                          <span className="inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800/80 text-slate-400 border border-slate-700/50 mt-1">
+                            {d.policy_rule}
+                          </span>
+                        ) : reasons.length > 0 ? (
+                          <span className="text-[11px] text-slate-500 mt-0.5 block truncate max-w-[220px]">
+                            {reasons[0]}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-5 py-3 align-top">
                         <VerdictBadge verdict={d.verdict} />
@@ -194,57 +201,106 @@ function Dashboard() {
                       </td>
                     </tr>
 
-                    {/* Fix #11: expandable detail row */}
-                    {isExpanded && (
-                      <tr
-                        key={`${d.id}-detail`}
-                        className="bg-slate-900/40 border-b border-border/40"
-                      >
-                        <td />
-                        <td colSpan={5} className="px-5 py-3">
-                          <div className="text-xs space-y-2">
-                            <div className="text-gray-400 font-mono text-[11px]">
-                              {new Date(d.created_at).toLocaleString()}
-                            </div>
-                            {reasons.length > 0 && (
-                              <div>
-                                <span className="text-gray-400 font-semibold uppercase tracking-wide text-[10px]">
-                                  Reasons
-                                </span>
-                                <ul className="mt-1 space-y-0.5 list-disc list-inside">
-                                  {reasons.map((r, idx) => (
-                                    <li
-                                      key={idx}
-                                      className={`${colorClass} text-[11px]`}
-                                    >
-                                      {r}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {d.arguments &&
-                              Object.keys(d.arguments).length > 0 && (
-                                <div>
-                                  <span className="text-gray-400 font-semibold uppercase tracking-wide text-[10px]">
-                                    Arguments
+                    {/* Expandable detail row: Groq reasoning, security signals, payload */}
+                    {isExpanded && (() => {
+                      const groqReasoning =
+                        d.note ||
+                        (d.arguments?._reasoning as string) ||
+                        (d.arguments?.reasoning as string) ||
+                        (d.arguments?.intent as string);
+
+                      const cleanArgs = d.arguments ? { ...d.arguments } : null;
+                      if (cleanArgs) {
+                        delete cleanArgs._reasoning;
+                        delete cleanArgs.reasoning;
+                        delete cleanArgs.intent;
+                      }
+                      const hasCleanArgs = cleanArgs && Object.keys(cleanArgs).length > 0;
+
+                      return (
+                        <tr
+                          key={`${d.id}-detail`}
+                          className="bg-slate-900/60 border-b border-border/60"
+                        >
+                          <td />
+                          <td colSpan={5} className="px-5 py-4">
+                            <div className="space-y-3.5">
+                              {/* Groq AI Reasoning Card */}
+                              {groqReasoning ? (
+                                <div className="rounded-lg bg-indigo-950/30 border border-indigo-500/20 p-3.5 space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-indigo-400 text-xs font-semibold">
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <span>AI Reasoning & Intent Analysis (Groq)</span>
+                                  </div>
+                                  <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                                    {groqReasoning}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="rounded-lg bg-slate-950/50 border border-slate-800/80 p-3 text-xs text-slate-400 flex items-center gap-2">
+                                  <Sparkles className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>Automated gateway decision (no LLM reasoning payload attached)</span>
+                                </div>
+                              )}
+
+                              {/* Security Signals & Policy Summary */}
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                {d.policy_rule && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 font-mono text-[11px] border border-slate-700">
+                                    <Shield className="w-3 h-3 text-blue-400" />
+                                    Rule: {d.policy_rule}
                                   </span>
-                                  <pre className="mt-1 text-[11px] text-gray-300 bg-slate-950 border border-slate-800 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all">
-                                    {JSON.stringify(d.arguments, null, 2)}
+                                )}
+                                {d.injection_score !== undefined && d.injection_score > 0 && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-300 font-mono text-[11px] border border-rose-500/30">
+                                    Injection Score: {Math.round(d.injection_score * 100)}%
+                                  </span>
+                                )}
+                                {d.pii_labels && d.pii_labels.length > 0 && (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-300 font-mono text-[11px] border border-amber-500/30">
+                                    PII Detected: {d.pii_labels.join(", ")}
+                                  </span>
+                                )}
+                                {d.masked && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] border border-emerald-500/20">
+                                    Masked
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Tool Call Arguments Payload */}
+                              {hasCleanArgs && (
+                                <div>
+                                  <div className="flex items-center gap-1.5 text-slate-400 font-semibold uppercase tracking-wide text-[10px] mb-1.5">
+                                    <Terminal className="w-3 h-3" />
+                                    <span>Tool Arguments Payload</span>
+                                  </div>
+                                  <pre className="text-[11px] font-mono text-slate-300 bg-slate-950 border border-slate-800 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-all">
+                                    {JSON.stringify(cleanArgs, null, 2)}
                                   </pre>
                                 </div>
                               )}
-                            {reasons.length === 0 &&
-                              (!d.arguments ||
-                                Object.keys(d.arguments).length === 0) && (
-                                <span className="text-gray-600 text-[11px]">
-                                  No additional details available.
-                                </span>
+
+                              {/* Gateway Verification Triggers */}
+                              {reasons.length > 0 && (
+                                <div>
+                                  <span className="text-slate-400 font-semibold uppercase tracking-wide text-[10px]">
+                                    Gateway Verification Triggers
+                                  </span>
+                                  <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                                    {reasons.map((r, idx) => (
+                                      <li key={idx} className={`${colorClass} text-[11px]`}>
+                                        {r}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
                               )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })()}
                   </>
                 );
               })}
