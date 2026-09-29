@@ -40,7 +40,55 @@ async def run(
         resource_type_explicit=normalized.resource_type,
     )
 
-    # ── 0. Kill switch check (highest precedence) ─────────────
+    # ── 0a. Check HITL Approval (Execution Resume) ───────────
+    if normalized.approval_id:
+        from uuid import UUID as _UUID
+        from sqlalchemy import select
+        from app.db.models.approval import Approval
+        try:
+            appr_uuid = _UUID(str(normalized.approval_id))
+            appr_res = await db.execute(
+                select(Approval).where(
+                    Approval.id == appr_uuid,
+                    Approval.tenant_id == agent.tenant_id,
+                    Approval.status == "approved",
+                )
+            )
+            approved_obj = appr_res.scalar_one_or_none()
+            if approved_obj:
+                decision = Decision(
+                    agent_id=agent.id,
+                    tenant_id=agent.tenant_id,
+                    tool=normalized.tool,
+                    action=sig.action,
+                    resource_type=sig.resource_type,
+                    arguments=normalized.arguments,
+                    verdict="ALLOW",
+                    risk_score=0.0,
+                    reasons=[f"Authorized via supervisor sign-off ({approved_obj.decided_by}): {approved_obj.decision_note or 'Manual approval'}"],
+                    signals=[],
+                    injection_score=sig.injection_score,
+                    pii_classification=sig.pii_classification,
+                    pii_labels=sig.pii_labels,
+                    note=f"resumed_from_approval={approved_obj.id}",
+                )
+                db.add(decision)
+                await db.commit()
+                await db.refresh(decision)
+                await _audit(decision, agent)
+                return PipelineResult(
+                    decision=decision,
+                    response=_to_response(decision, approval_id=approved_obj.id),
+                )
+        except Exception:
+            pass  # Fall through to standard pipeline if invalid UUID
+
+    # ── In-flight PII Masking ────────────────────────────────
+    from app.detection.pii.masker import mask_pii_in_data
+    masked_args, masked_labels = mask_pii_in_data(normalized.arguments)
+    is_masked = bool(masked_labels)
+
+    # ── 0b. Kill switch check (highest precedence) ───────────
     ks = await kill_switch_controller.check(
         db,
         agent_id=agent.id,
@@ -69,6 +117,7 @@ async def run(
         await db.refresh(decision)
         await _audit(decision, agent)
         return PipelineResult(decision=decision, response=_to_response(decision))
+
 
     # ── 1. Policy evaluation ─────────────────────────────────
     policy = await policy_service.find_active_policy_for_tenant(db, agent.tenant_id)
@@ -128,7 +177,11 @@ async def run(
     )
 
     # ── 4. Combine policy + risk ─────────────────────────────
-    if policy_effect == "escalate" and risk.verdict == "ALLOW":
+    if policy_effect == "mask":
+        final_verdict = "ALLOW"
+        final_reasons = list(risk.reasons) + [f"Sensitive data masked in flight by AgentShield DLP: {policy_reason or 'Protected'}"]
+        is_masked = True
+    elif policy_effect == "escalate" and risk.verdict == "ALLOW":
         final_verdict = "ESCALATE"
         final_reasons = list(risk.reasons) + [f"Policy escalated: {policy_reason}"]
     elif policy_effect == "allow":
@@ -146,7 +199,7 @@ async def run(
         tool=normalized.tool,
         action=risk.action,
         resource_type=risk.resource_type,
-        arguments=normalized.arguments,
+        arguments=masked_args if is_masked else normalized.arguments,
         verdict=final_verdict,
         risk_score=risk.risk_score,
         reasons=final_reasons,
@@ -171,7 +224,15 @@ async def run(
         if approval:
             approval_id = approval.id
 
-    return PipelineResult(decision=decision, response=_to_response(decision, approval_id=approval_id))
+    return PipelineResult(
+        decision=decision,
+        response=_to_response(
+            decision,
+            approval_id=approval_id,
+            masked=is_masked,
+            masked_arguments=masked_args if is_masked else None,
+        ),
+    )
 
 
 async def _audit(decision: Decision, agent: Agent) -> None:
@@ -255,7 +316,12 @@ async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> Any
         return approval
 
 
-def _to_response(decision: Decision, approval_id: Any = None) -> DecideResponse:
+def _to_response(
+    decision: Decision,
+    approval_id: Any = None,
+    masked: bool = False,
+    masked_arguments: Optional[dict[str, Any]] = None,
+) -> DecideResponse:
     return DecideResponse(
         decision_id=decision.id,
         verdict=decision.verdict,
@@ -270,6 +336,8 @@ def _to_response(decision: Decision, approval_id: Any = None) -> DecideResponse:
         injection_score=decision.injection_score,
         pii_classification=decision.pii_classification,
         pii_labels=decision.pii_labels,
+        masked=masked,
+        masked_arguments=masked_arguments if masked else None,
         approval_id=approval_id,
         created_at=decision.created_at,
     )

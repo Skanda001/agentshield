@@ -12,7 +12,7 @@ from app.schemas.policy import PolicyDocument, RuleSchema
 
 
 # Higher = more restrictive. Used for tie-breaking at equal priority.
-EFFECT_RANK = {"allow": 0, "escalate": 1, "deny": 2}
+EFFECT_RANK = {"allow": 0, "mask": 1, "escalate": 2, "deny": 3}
 
 
 @dataclass

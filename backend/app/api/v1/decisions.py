@@ -28,6 +28,7 @@ async def decide(
             tool=payload.tool,
             arguments=payload.arguments,
             resource_type=payload.resource_type,
+            approval_id=payload.approval_id,
         ),
         data_classification=payload.data_classification,
     )

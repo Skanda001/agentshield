@@ -11,6 +11,8 @@ from app.schemas.policy import (
     PolicyCreate,
     PolicyEvaluationPreview,
     PolicyOut,
+    PolicySimulateRequest,
+    PolicySimulateResponse,
     PolicyVersionOut,
 )
 from app.services import policy_service as svc
@@ -101,4 +103,91 @@ async def evaluate(
         resource_type=resource_type,
         arguments={},
         data_classification=data_classification,
+    )
+
+
+@router.post("/policies/simulate", response_model=PolicySimulateResponse)
+async def simulate_policy(
+    payload: PolicySimulateRequest,
+    db: AsyncSession = Depends(get_db),
+    agent=Depends(get_current_agent),
+):
+    """Dry-run simulation of a tool call against the active policy and risk engine without DB writes."""
+    from app.detection.pii.masker import mask_pii_in_data
+    from app.risk_engine.signals import extract_signals
+    from app.risk_engine.deterministic import evaluate as evaluate_risk
+
+    # 1. Signals & heuristics
+    sig = extract_signals(
+        tool=payload.tool,
+        arguments=payload.arguments,
+        resource_type_explicit=payload.resource_type,
+    )
+
+    # 2. In-flight PII Masking preview
+    masked_args, masked_labels = mask_pii_in_data(payload.arguments)
+    is_masked = bool(masked_labels)
+
+    # 3. Active Policy evaluation
+    policy = await svc.find_active_policy_for_tenant(db, agent.tenant_id)
+    policy_rule = None
+    policy_effect = None
+    policy_reason = None
+
+    if policy:
+        eval_result = await svc.evaluate_for_agent(
+            db,
+            policy=policy,
+            agent=agent,
+            action=sig.action,
+            resource_type=sig.resource_type,
+            arguments=payload.arguments,
+            data_classification=payload.data_classification or sig.pii_classification,
+        )
+        if eval_result.matched_rule:
+            policy_rule = eval_result.matched_rule
+            policy_effect = eval_result.effect
+            policy_reason = eval_result.reason
+
+    # 4. Risk evaluation
+    risk = evaluate_risk(
+        tool=payload.tool,
+        arguments=payload.arguments,
+        resource_type=payload.resource_type,
+    )
+
+    # 5. Determine projected verdict
+    if policy_effect == "deny":
+        verdict = "BLOCK"
+        reasons = [f"Denied by policy: {policy_reason}"]
+    elif policy_effect == "mask":
+        verdict = "ALLOW"
+        reasons = list(risk.reasons) + [f"Sensitive data masked in flight by AgentShield DLP: {policy_reason or 'Protected'}"]
+        is_masked = True
+    elif policy_effect == "escalate" and risk.verdict == "ALLOW":
+        verdict = "ESCALATE"
+        reasons = list(risk.reasons) + [f"Policy escalated: {policy_reason}"]
+    elif policy_effect == "allow":
+        verdict = risk.verdict
+        reasons = list(risk.reasons)
+        if policy_reason:
+            reasons.insert(0, f"Policy allowed: {policy_reason}")
+    else:
+        verdict = risk.verdict
+        reasons = list(risk.reasons)
+
+    return PolicySimulateResponse(
+        verdict=verdict,
+        risk_score=risk.risk_score,
+        reasons=reasons,
+        matched_rule=policy_rule,
+        policy_effect=policy_effect,
+        policy_reason=policy_reason,
+        action=sig.action,
+        resource_type=sig.resource_type,
+        signals=[s.model_dump() for s in risk.signals],
+        injection_score=sig.injection_score,
+        pii_detected=sig.pii_labels,
+        masked=is_masked,
+        masked_arguments=masked_args if is_masked else None,
     )

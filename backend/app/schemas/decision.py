@@ -11,6 +11,7 @@ class DecideRequest(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     resource_type: Optional[str] = Field(default=None, max_length=80)
     data_classification: Optional[str] = Field(default=None, max_length=40)
+    approval_id: Optional[UUID] = None  # Resuming an approved HITL escalation
 
 
 class Signal(BaseModel):
@@ -35,9 +36,11 @@ class DecideResponse(BaseModel):
 
     injection_score: float = 0.0
 
-    # PII / DLP (added Chunk 7)
+    # PII / DLP
     pii_classification: Optional[str] = None
     pii_labels: list[str] = Field(default_factory=list)
+    masked: bool = False
+    masked_arguments: Optional[dict[str, Any]] = None
 
     approval_id: Optional[UUID] = None
 
@@ -55,6 +58,7 @@ class DecisionOut(BaseModel):
     risk_score: float
     reasons: list[str]
     policy_rule: Optional[str] = None
+    masked: bool = False
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True}

@@ -12,6 +12,7 @@ class ToolCall:
     tool: str
     arguments: dict[str, Any]
     resource_type: Optional[str] = None
+    approval_id: Optional[Any] = None
 
 
 @dataclass
@@ -19,6 +20,7 @@ class NormalizedCall:
     tool: str
     arguments: dict[str, Any]
     resource_type: Optional[str]
+    approval_id: Optional[Any] = None
     warnings: list[str] = field(default_factory=list)
 
 
@@ -42,5 +44,6 @@ def normalize(call: ToolCall) -> NormalizedCall:
         tool=call.tool.strip(),
         arguments=clean_args,
         resource_type=call.resource_type,
+        approval_id=call.approval_id,
         warnings=warnings,
     )
