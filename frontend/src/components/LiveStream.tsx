@@ -14,9 +14,9 @@ type Decision = {
 
 export default function LiveStream() {
   const { data: decisions = [] } = useQuery<Decision[]>({
-    queryKey: ["decisions"],
+    queryKey: ["decisions-live"],           // unique key — no collision with Dashboard/Chart
     queryFn: async () => (await api.get("/decisions?limit=200")).data,
-    refetchInterval: 5000,
+    refetchInterval: 3000,                  // poll faster for "live" feel
   });
 
   const latest = decisions.slice(0, 10);

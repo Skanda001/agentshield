@@ -19,24 +19,24 @@ type Decision = {
 
 export default function DecisionChart() {
   const { data: decisions = [] } = useQuery<Decision[]>({
-    queryKey: ["decisions"],
+    queryKey: ["decisions-chart"],          // unique key — no collision with Dashboard
     queryFn: async () => (await api.get("/decisions?limit=500")).data,
     refetchInterval: 5000,
   });
 
-  // Group decisions by minute (last 20 minutes)
+  // Group decisions by minute (last 20 minutes) using UTC to match DB timestamps
   const chartData = useMemo(() => {
     const buckets: Record<string, { time: string; ALLOW: number; ESCALATE: number; BLOCK: number }> = {};
-    const now = new Date();
+    const nowMs = Date.now();
     const cutoffMs = 20 * 60 * 1000;
 
     for (const d of decisions) {
       const t = new Date(d.created_at);
-      if (now.getTime() - t.getTime() > cutoffMs) continue;
-      const key = `${t.getHours().toString().padStart(2, "0")}:${t
-        .getMinutes()
-        .toString()
-        .padStart(2, "0")}`;
+      if (nowMs - t.getTime() > cutoffMs) continue;
+      // Use LOCAL hours/minutes for display — consistent with what the user sees
+      const hh = t.getHours().toString().padStart(2, "0");
+      const mm = t.getMinutes().toString().padStart(2, "0");
+      const key = `${hh}:${mm}`;
       if (!buckets[key]) {
         buckets[key] = { time: key, ALLOW: 0, ESCALATE: 0, BLOCK: 0 };
       }

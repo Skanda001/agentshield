@@ -89,35 +89,42 @@ export default function TopBar() {
 
       if (!token) {
         try {
-          const suffix = Date.now().toString(36);
-          const tRes = await api.post("/tenants", {
-            name: `Demo Org ${suffix}`,
-            slug: `demo-${suffix}`,
-          });
-          const agRes = await api.post("/agents", {
-            tenant_id: tRes.data.id,
-            name: "Customer Support Agent",
-            role: "support",
-            scopes: ["read:order", "read:customer", "write:refund"],
-          });
-          const tokRes = await api.post("/agents/token", {
-            api_key: agRes.data.api_key,
-          });
-          token = tokRes.data.access_token;
-          if (token) localStorage.setItem("token", token);
+          const demoKey = import.meta.env.VITE_DEMO_API_KEY as string | undefined;
 
-          // Load demo policy (best effort)
-          try {
-            await api.post(
-              `/policies/load-yaml?tenant_id=${tRes.data.id}&file_path=policies/demo.yaml`
-            );
-          } catch {
-            // non-fatal
+          if (demoKey) {
+            // Re-authenticate to the SAME persistent agent — dashboard never resets
+            const tokRes = await api.post("/agents/token", { api_key: demoKey });
+            token = tokRes.data.access_token;
+            if (token) localStorage.setItem("token", token);
+          } else {
+            // Fallback: provision a new tenant (only when VITE_DEMO_API_KEY not configured)
+            const suffix = Date.now().toString(36);
+            const tRes = await api.post("/tenants", {
+              name: `Demo Org ${suffix}`,
+              slug: `demo-${suffix}`,
+            });
+            const agRes = await api.post("/agents", {
+              tenant_id: tRes.data.id,
+              name: "Customer Support Agent",
+              role: "support",
+              scopes: ["read:order", "read:customer", "write:refund"],
+            });
+            const tokRes = await api.post("/agents/token", {
+              api_key: agRes.data.api_key,
+            });
+            token = tokRes.data.access_token;
+            if (token) localStorage.setItem("token", token);
+            try {
+              await api.post(
+                `/policies/load-yaml?tenant_id=${tRes.data.id}&file_path=policies/demo.yaml`
+              );
+            } catch { /* non-fatal */ }
           }
         } catch (e) {
-          console.warn("Auto-token provision notice:", e);
+          console.warn("Token auth notice:", e);
         }
       }
+
 
       const scenarios = pickScenarios(5);
       for (const s of scenarios) {
@@ -130,6 +137,8 @@ export default function TopBar() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["decisions"] });
+      qc.invalidateQueries({ queryKey: ["decisions-live"] });
+      qc.invalidateQueries({ queryKey: ["decisions-chart"] });
       qc.invalidateQueries({ queryKey: ["approvals-all"] });
       qc.invalidateQueries({ queryKey: ["approvals"] });
       qc.invalidateQueries({ queryKey: ["audit-verify"] });
