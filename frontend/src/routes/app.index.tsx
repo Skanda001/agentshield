@@ -3,7 +3,6 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { ShieldCheck, ShieldX, AlertTriangle, UserCheck, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import PageHeader from "@/components/PageHeader";
-import ThreatOverviewDashboard from "@/components/ThreatOverviewDashboard";
 import StatCard from "@/components/StatCard";
 import AuditStatusCard from "@/components/AuditStatusCard";
 import LiveStream from "@/components/LiveStream";
@@ -63,18 +62,43 @@ function Dashboard() {
 
   return (
     <>
-      {/* ── Centerpiece Threat Overview Dashboard ─────────────────── */}
-      <div className="mb-8">
-        <ThreatOverviewDashboard />
+      <PageHeader
+        title="Dashboard"
+        description="Overview of agent activity and security posture."
+      />
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard label="Allowed" value={counts.allow} color="success" icon={ShieldCheck} />
+        <StatCard
+          label="Escalated"
+          value={counts.escalate}
+          color="warn"
+          icon={AlertTriangle}
+          subtitle={`${counts.pending} awaiting approval`}
+        />
+        <StatCard label="Blocked" value={counts.block} color="danger" icon={ShieldX} />
+        <StatCard
+          label="Human Decisions"
+          value={counts.approved + counts.denied}
+          color="accent"
+          icon={UserCheck}
+          subtitle={`${counts.approved} approved · ${counts.denied} denied`}
+        />
       </div>
 
-      {/* ── Cryptographic Audit Chain Integrity ───────────────────── */}
+      {/* Audit status */}
       <div className="mb-6">
         <AuditStatusCard />
       </div>
 
-      {/* ── Detailed Decisions Ledger ─────────────────────────────── */}
+      {/* Chart + Live stream */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <DecisionChart />
+        <LiveStream />
+      </div>
 
+      {/* Recent decisions table */}
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <span className="font-semibold text-sm">Recent decisions</span>
