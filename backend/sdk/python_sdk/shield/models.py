@@ -25,6 +25,7 @@ class Decision:
     injection_score: float = 0.0
     pii_classification: str | None = None
     pii_labels: list[str] = field(default_factory=list)
+    approval_id: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Decision":
@@ -42,4 +43,5 @@ class Decision:
             injection_score=float(d.get("injection_score", 0.0)),
             pii_classification=d.get("pii_classification"),
             pii_labels=list(d.get("pii_labels", [])),
+            approval_id=str(d.get("approval_id")) if d.get("approval_id") else None,
         )

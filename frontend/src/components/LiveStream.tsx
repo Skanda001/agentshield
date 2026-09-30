@@ -22,8 +22,8 @@ export default function LiveStream() {
   const latest = decisions.slice(0, 10);
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="card p-5 flex flex-col h-[400px]">
+      <div className="flex items-center gap-2 mb-3 flex-shrink-0">
         <Activity className="w-4 h-4 text-accent" />
         <span className="font-semibold text-sm">Live activity</span>
         <span className="ml-auto flex items-center gap-1.5 text-xs text-gray-500">
@@ -33,11 +33,11 @@ export default function LiveStream() {
       </div>
 
       {latest.length === 0 ? (
-        <div className="text-sm text-gray-500 py-8 text-center">
+        <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
           No decisions yet. Click "Run demo" in the top bar.
         </div>
       ) : (
-        <div className="space-y-1">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1">
           {latest.map((d, i) => {
             const reasons = d.reasons ?? [];
             const colorClass =

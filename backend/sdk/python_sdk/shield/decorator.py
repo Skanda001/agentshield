@@ -42,7 +42,11 @@ def _bind_arguments(func: Callable, args: tuple, kwargs: dict) -> dict[str, Any]
     try:
         sig = inspect.signature(func)
         bound = sig.bind_partial(*args, **kwargs)
-        return {k: _jsonable(v) for k, v in bound.arguments.items()}
+        res = {k: _jsonable(v) for k, v in bound.arguments.items()}
+        if "kwargs" in res and isinstance(res["kwargs"], dict):
+            extra = res.pop("kwargs")
+            res.update(extra)
+        return res
     except Exception:
         return {"_raw_args": _jsonable(list(args)), "_raw_kwargs": _jsonable(kwargs)}
 
@@ -106,14 +110,15 @@ def protect(
                     tool=tool_name,
                 )
 
-            if decision.verdict == "ESCALATE":
-                approval_id = None
-                try:
-                    app = cli.get_approval_for_decision(decision.decision_id)
-                    if app:
-                        approval_id = str(app.get("id"))
-                except Exception:
-                    pass
+            if decision.verdict in ("HITL", "ESCALATE"):
+                approval_id = getattr(decision, "approval_id", None)
+                if not approval_id:
+                    try:
+                        app = cli.get_approval_for_decision(decision.decision_id)
+                        if app:
+                            approval_id = str(app.get("id"))
+                    except Exception:
+                        pass
                 raise ShieldEscalated(
                     reason="; ".join(decision.reasons) or "Requires human approval",
                     decision_id=decision.decision_id,

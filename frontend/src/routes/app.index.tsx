@@ -35,14 +35,29 @@ type Approval = {
   status: string;
 };
 
+type DecisionStats = {
+  total: number;
+  allow: number;
+  escalate: number;
+  block: number;
+};
+
 function Dashboard() {
   const [expandedDecisionId, setExpandedDecisionId] = useState<string | null>(null);
 
-  // Fix #9: limit=50 matches backend default; Fix #12: keepPreviousData prevents blank flash on refetch
+  // Live aggregate stats across all decisions (never drops or fluctuates with sliding windows)
+  const { data: stats = { total: 0, allow: 0, escalate: 0, block: 0 } } = useQuery<DecisionStats>({
+    queryKey: ["decisions-stats"],
+    queryFn: async () => (await api.get("/decisions/stats")).data,
+    refetchInterval: 3000,
+    placeholderData: keepPreviousData,
+  });
+
+  // Recent decisions table
   const { data: decisions = [] } = useQuery<Decision[]>({
     queryKey: ["decisions"],
     queryFn: async () => (await api.get("/decisions?limit=50")).data,
-    refetchInterval: 5000,
+    refetchInterval: 3000,
     placeholderData: keepPreviousData,
   });
 
@@ -54,11 +69,6 @@ function Dashboard() {
   });
 
   const counts = {
-    allow: decisions.filter((d) => d.verdict === "ALLOW").length,
-    escalate: decisions.filter((d) => d.verdict === "HITL").length,
-    block: decisions.filter((d) => d.verdict === "BLOCK").length,
-    denied: approvals.filter((a) => a.status === "denied").length,
-    approved: approvals.filter((a) => a.status === "approved").length,
     pending: approvals.filter((a) => a.status === "pending").length,
   };
 
@@ -72,24 +82,18 @@ function Dashboard() {
         description="Overview of agent activity and security posture."
       />
 
-      {/* Stat cards */}
+      {/* 4 Stat Cards matching the exact Audit Log metrics: Total Calls, Allowed, Escalated (HITL), Blocked */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Allowed" value={counts.allow} color="success" icon={ShieldCheck} />
+        <StatCard label="Total Calls" value={stats.total} color="accent" icon={Shield} />
+        <StatCard label="Allowed" value={stats.allow} color="success" icon={ShieldCheck} />
         <StatCard
-          label="Escalated"
-          value={counts.escalate}
+          label="Escalated (HITL)"
+          value={stats.escalate}
           color="warn"
           icon={AlertTriangle}
-          subtitle={`${counts.pending} awaiting approval`}
+          subtitle={counts.pending > 0 ? `${counts.pending} awaiting approval` : undefined}
         />
-        <StatCard label="Blocked" value={counts.block} color="danger" icon={ShieldX} />
-        <StatCard
-          label="Human Decisions"
-          value={counts.approved + counts.denied}
-          color="accent"
-          icon={UserCheck}
-          subtitle={`${counts.approved} approved · ${counts.denied} denied`}
-        />
+        <StatCard label="Blocked" value={stats.block} color="danger" icon={ShieldX} />
       </div>
 
       {/* Audit status */}
@@ -134,7 +138,7 @@ function Dashboard() {
                 const colorClass =
                   d.verdict === "BLOCK"
                     ? "text-danger/70"
-                    : d.verdict === "HITL"
+                    : d.verdict === "HITL" || (d.verdict as string) === "ESCALATE"
                     ? "text-warn/70"
                     : "text-gray-500";
 
@@ -225,25 +229,99 @@ function Dashboard() {
                           <td />
                           <td colSpan={5} className="px-5 py-4">
                             <div className="space-y-3.5">
-                              {/* Groq AI Reasoning Card */}
-                              {groqReasoning ? (
-                                <div className="rounded-lg bg-indigo-950/30 border border-indigo-500/20 p-3.5 space-y-1.5">
-                                  <div className="flex items-center gap-1.5 text-indigo-400 text-xs font-semibold">
-                                    <Sparkles className="w-3.5 h-3.5" />
-                                    <span>AI Reasoning & Intent Analysis (Groq)</span>
+                              {/* 1. Dedicated Reasons Summary Card */}
+                              <div
+                                className={`rounded-xl border p-4 space-y-3 ${
+                                  d.verdict === "BLOCK"
+                                    ? "bg-rose-950/20 border-rose-500/30 text-rose-200"
+                                    : d.verdict === "HITL" || (d.verdict as string) === "ESCALATE"
+                                    ? "bg-amber-950/20 border-amber-500/30 text-amber-200"
+                                    : "bg-emerald-950/20 border-emerald-500/30 text-emerald-200"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <div className="flex items-center gap-2 font-semibold text-sm text-white">
+                                    {d.verdict === "BLOCK" ? (
+                                      <ShieldX className="w-4 h-4 text-rose-400" />
+                                    ) : d.verdict === "HITL" || (d.verdict as string) === "ESCALATE" ? (
+                                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                                    ) : (
+                                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                                    )}
+                                    <span>Reasons Summary</span>
                                   </div>
-                                  <p className="text-xs text-slate-200 leading-relaxed font-sans">
-                                    {groqReasoning}
-                                  </p>
+                                  <span
+                                    className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                                      d.verdict === "BLOCK"
+                                        ? "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                                        : d.verdict === "HITL" || (d.verdict as string) === "ESCALATE"
+                                        ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                                        : "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+                                    }`}
+                                  >
+                                    {d.verdict === "BLOCK"
+                                      ? "Blocked by Policy"
+                                      : d.verdict === "HITL" || (d.verdict as string) === "ESCALATE"
+                                      ? "Human Sign-off Required"
+                                      : "Permitted by Policy"}
+                                  </span>
                                 </div>
-                              ) : (
-                                <div className="rounded-lg bg-slate-950/50 border border-slate-800/80 p-3 text-xs text-slate-400 flex items-center gap-2">
-                                  <Sparkles className="w-3.5 h-3.5 text-slate-500" />
-                                  <span>Automated gateway decision (no LLM reasoning payload attached)</span>
-                                </div>
-                              )}
 
-                              {/* Security Signals & Policy Summary */}
+                                {/* Plain-English synthesized explanation */}
+                                <div className="text-xs text-slate-200 leading-relaxed font-sans space-y-1.5">
+                                  <p>
+                                    {d.verdict === "BLOCK"
+                                      ? `Operation on tool '${d.tool}' was refused by AgentShield security gateway. ${
+                                          d.policy_rule ? `Enforcing policy rule '${d.policy_rule}'.` : ""
+                                        } High-risk or prohibited operation detected.`
+                                      : d.verdict === "HITL" || (d.verdict as string) === "ESCALATE"
+                                      ? `Operation on tool '${d.tool}' was escalated for Human-in-the-Loop review. ${
+                                          d.policy_rule
+                                            ? `Triggered security policy rule '${d.policy_rule}' due to sensitive resource access.`
+                                            : ""
+                                        }`
+                                      : `Operation on tool '${d.tool}' cleared all security checks within allowable safety parameters.`}
+                                  </p>
+
+                                  {/* Detailed decision triggers from the gateway */}
+                                  {reasons.length > 0 && (
+                                    <div className="pt-2 border-t border-slate-800/80">
+                                      <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400 block mb-1.5">
+                                        Policy & Gateway Decision Triggers:
+                                      </span>
+                                      <ul className="space-y-1 pl-1">
+                                        {reasons.map((r, idx) => (
+                                          <li key={idx} className="flex items-start gap-2 text-[11px] text-slate-300">
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                                                d.verdict === "BLOCK"
+                                                  ? "bg-rose-400"
+                                                  : d.verdict === "HITL" || (d.verdict as string) === "ESCALATE"
+                                                  ? "bg-amber-400"
+                                                  : "bg-emerald-400"
+                                              }`}
+                                            />
+                                            <span>{r}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Groq AI Reasoning & Intent Card if present */}
+                                {groqReasoning && (
+                                  <div className="pt-2.5 border-t border-slate-800/80 flex items-start gap-2 text-xs">
+                                    <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-semibold text-indigo-300">AI Prompt Intent (Groq): </span>
+                                      <span className="text-slate-300 font-sans">{groqReasoning}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 2. Security Signals & Policy Rule Badges */}
                               <div className="flex flex-wrap items-center gap-2 text-xs">
                                 {d.policy_rule && (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 font-mono text-[11px] border border-slate-700">
@@ -268,7 +346,7 @@ function Dashboard() {
                                 )}
                               </div>
 
-                              {/* Tool Call Arguments Payload */}
+                              {/* 3. Tool Call Arguments Payload */}
                               {hasCleanArgs && (
                                 <div>
                                   <div className="flex items-center gap-1.5 text-slate-400 font-semibold uppercase tracking-wide text-[10px] mb-1.5">
@@ -278,22 +356,6 @@ function Dashboard() {
                                   <pre className="text-[11px] font-mono text-slate-300 bg-slate-950 border border-slate-800 rounded-lg p-2.5 overflow-x-auto whitespace-pre-wrap break-all">
                                     {JSON.stringify(cleanArgs, null, 2)}
                                   </pre>
-                                </div>
-                              )}
-
-                              {/* Gateway Verification Triggers */}
-                              {reasons.length > 0 && (
-                                <div>
-                                  <span className="text-slate-400 font-semibold uppercase tracking-wide text-[10px]">
-                                    Gateway Verification Triggers
-                                  </span>
-                                  <ul className="mt-1 space-y-0.5 list-disc list-inside">
-                                    {reasons.map((r, idx) => (
-                                      <li key={idx} className={`${colorClass} text-[11px]`}>
-                                        {r}
-                                      </li>
-                                    ))}
-                                  </ul>
                                 </div>
                               )}
                             </div>

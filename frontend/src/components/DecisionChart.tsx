@@ -52,18 +52,18 @@ export default function DecisionChart() {
   }, [decisions]);
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-4">
+    <div className="card p-5 flex flex-col h-[400px]">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <span className="font-semibold text-sm">Decisions per minute</span>
         <span className="text-xs text-gray-500">last 20 min</span>
       </div>
 
       {chartData.length === 0 ? (
-        <div className="h-64 flex items-center justify-center text-sm text-gray-500">
+        <div className="flex-1 flex items-center justify-center text-sm text-gray-500">
           No data in the last 20 minutes.
         </div>
       ) : (
-        <div className="h-64">
+        <div className="flex-1 min-h-0 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} barCategoryGap={2}>
               <CartesianGrid
@@ -102,7 +102,7 @@ export default function DecisionChart() {
         </div>
       )}
 
-      <div className="flex items-center gap-4 mt-4 text-xs text-gray-500">
+      <div className="flex items-center gap-4 mt-3 pt-2 border-t border-border/40 text-xs text-gray-500 flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-sm bg-success" />
           Allow

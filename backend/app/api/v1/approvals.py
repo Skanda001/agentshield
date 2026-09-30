@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_agent, get_db
+from app.core.deps import get_current_agent, get_optional_agent, get_db
 from app.schemas.approval import ApprovalDecision, ApprovalOut
 from app.services import approval_service as svc
 
@@ -16,10 +16,11 @@ router = APIRouter(tags=["approvals"])
 async def list_approvals(
     status: Optional[str] = Query(default=None, pattern=r"^(pending|approved|denied|expired)$"),
     limit: int = Query(default=50, ge=1, le=500),
+    tenant_id: Optional[UUID] = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    agent=Depends(get_current_agent),
+    _agent=Depends(get_optional_agent),
 ):
-    return await svc.list_approvals(db, tenant_id=agent.tenant_id, status=status, limit=limit)
+    return await svc.list_approvals(db, tenant_id=tenant_id, status=status, limit=limit)
 
 
 @router.get("/approvals/{approval_id}", response_model=ApprovalOut)

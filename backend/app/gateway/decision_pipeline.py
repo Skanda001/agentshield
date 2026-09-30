@@ -162,6 +162,7 @@ async def run(
             injection_score=sig.injection_score,
             pii_classification=sig.pii_classification,
             pii_labels=sig.pii_labels,
+            note=normalized.arguments.get("_reasoning") or normalized.arguments.get("reasoning") or normalized.arguments.get("summary"),
         )
         db.add(decision)
         await db.commit()
