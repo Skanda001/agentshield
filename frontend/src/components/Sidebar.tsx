@@ -8,7 +8,6 @@ import {
   FileText,
   ScrollText,
   Zap,
-  Cpu,
   LogOut,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
@@ -16,7 +15,6 @@ import { api, API_URL } from "@/lib/api";
 
 const NAV_ITEMS = [
   { group: "Main", to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { group: "Main", to: "/app/plugins", label: "Agents", icon: Cpu, exact: false },
   { group: "Security", to: "/app/approvals", label: "Approvals", icon: CheckCircle2, exact: false },
   { group: "Security", to: "/app/policies", label: "Policies", icon: FileText, exact: false },
   { group: "Security", to: "/app/audit", label: "Audit Log", icon: ScrollText, exact: false },
