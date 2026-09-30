@@ -86,7 +86,8 @@ class CustomerSupportAgent:
         except ShieldEscalated as e:
             if auto_approve and e.approval_id:
                 self.client.decide_approval(e.approval_id, approved=True, decided_by="supervisor")
-                raw_out = crm.get_customer(args.get("customer_id", 1008)) or {}
+                actual_cid = args.get("customer_id", 1001)
+                raw_out = crm.get_customer(actual_cid) or {}
 
                 # Least privilege minimization
                 p_lower = prompt.lower()
