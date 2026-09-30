@@ -165,8 +165,8 @@ async def simulate_policy(
         reasons = list(risk.reasons) + [f"Sensitive data masked in flight by AgentShield DLP: {policy_reason or 'Protected'}"]
         is_masked = True
     elif policy_effect == "escalate" and risk.verdict == "ALLOW":
-        verdict = "ESCALATE"
-        reasons = list(risk.reasons) + [f"Policy escalated: {policy_reason}"]
+        verdict = "HITL"
+        reasons = list(risk.reasons) + [f"Policy escalated (HITL required): {policy_reason}"]
     elif policy_effect == "allow":
         verdict = risk.verdict
         reasons = list(risk.reasons)

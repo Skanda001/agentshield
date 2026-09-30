@@ -12,7 +12,7 @@ import {
 import { api } from "@/lib/api";
 
 type SimulateResult = {
-  verdict: "ALLOW" | "BLOCK" | "ESCALATE" | "MASK" | string;
+  verdict: "ALLOW" | "BLOCK" | "HITL" | "MASK" | string;
   risk_score: number;
   reasons: string[];
   matched_rule: string | null;
@@ -242,14 +242,14 @@ export default function PolicySimulator() {
                     ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
                     : result.verdict === "BLOCK"
                     ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                    : result.verdict === "ESCALATE"
+                    : result.verdict === "HITL"
                     ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
                     : "bg-blue-500/10 text-blue-400 border-blue-500/30"
                 }`}
               >
                 {result.verdict === "ALLOW" && <ShieldCheck className="w-3.5 h-3.5" />}
                 {result.verdict === "BLOCK" && <ShieldAlert className="w-3.5 h-3.5" />}
-                {result.verdict === "ESCALATE" && <AlertTriangle className="w-3.5 h-3.5" />}
+                {result.verdict === "HITL" && <AlertTriangle className="w-3.5 h-3.5" />}
                 {result.verdict}
               </span>
             </div>

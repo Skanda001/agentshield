@@ -2,9 +2,8 @@ export default function VerdictBadge({ verdict }: { verdict: string }) {
   const map: Record<string, string> = {
     ALLOW: "bg-success-soft text-success border-success/30",
     BLOCK: "bg-danger-soft text-danger border-danger/30",
-    // HITL and ESCALATE are the same thing in our system.
+    // HITL = Human-in-the-Loop: tool paused, waiting for human approval
     HITL: "bg-warn-soft text-warn border-warn/30",
-    ESCALATE: "bg-warn-soft text-warn border-warn/30",
     INFO: "bg-panel text-gray-400 border-border",
   };
   const cls = map[verdict] || "bg-panel text-gray-400 border-border";

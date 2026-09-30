@@ -26,7 +26,7 @@ export default function DecisionChart() {
 
   // Group decisions by minute (last 20 minutes) using UTC to match DB timestamps
   const chartData = useMemo(() => {
-    const buckets: Record<string, { time: string; ALLOW: number; ESCALATE: number; BLOCK: number }> = {};
+    const buckets: Record<string, { time: string; ALLOW: number; HITL: number; BLOCK: number }> = {};
     const nowMs = Date.now();
     const cutoffMs = 20 * 60 * 1000;
 
@@ -38,9 +38,11 @@ export default function DecisionChart() {
       const mm = t.getMinutes().toString().padStart(2, "0");
       const key = `${hh}:${mm}`;
       if (!buckets[key]) {
-        buckets[key] = { time: key, ALLOW: 0, ESCALATE: 0, BLOCK: 0 };
+        buckets[key] = { time: key, ALLOW: 0, HITL: 0, BLOCK: 0 };
       }
-      const verdict = d.verdict as "ALLOW" | "ESCALATE" | "BLOCK";
+      // Map legacy ESCALATE records to HITL for display
+      const rawVerdict = d.verdict as string;
+      const verdict = rawVerdict === "ESCALATE" ? "HITL" : rawVerdict as "ALLOW" | "HITL" | "BLOCK";
       if (verdict in buckets[key]) {
         buckets[key][verdict] += 1;
       }
@@ -93,7 +95,7 @@ export default function DecisionChart() {
                 cursor={{ fill: "#4b8bff10" }}
               />
               <Bar dataKey="ALLOW" stackId="a" fill="#2ecc71" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="ESCALATE" stackId="a" fill="#ffb84b" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="HITL" stackId="a" fill="#ffb84b" radius={[0, 0, 0, 0]} />
               <Bar dataKey="BLOCK" stackId="a" fill="#ff4b4b" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -107,7 +109,7 @@ export default function DecisionChart() {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-sm bg-warn" />
-          Escalate
+          HITL
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-sm bg-danger" />

@@ -182,8 +182,8 @@ async def run(
         final_reasons = list(risk.reasons) + [f"Sensitive data masked in flight by AgentShield DLP: {policy_reason or 'Protected'}"]
         is_masked = True
     elif policy_effect == "escalate" and risk.verdict == "ALLOW":
-        final_verdict = "ESCALATE"
-        final_reasons = list(risk.reasons) + [f"Policy escalated: {policy_reason}"]
+        final_verdict = "HITL"
+        final_reasons = list(risk.reasons) + [f"Policy escalated (HITL required): {policy_reason}"]
     elif policy_effect == "allow":
         final_verdict = risk.verdict
         final_reasons = list(risk.reasons)
@@ -218,9 +218,9 @@ async def run(
 
     await _audit(decision, agent)
 
-    # ── 5. Create approval for ESCALATE ──────────────────────
+    # ── 5. Create approval for HITL ──────────────────────────
     approval_id = None
-    if final_verdict == "ESCALATE":
+    if final_verdict == "HITL":
         approval = await _create_approval_if_escalated(decision, agent)
         if approval:
             approval_id = approval.id

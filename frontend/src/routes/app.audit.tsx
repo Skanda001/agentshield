@@ -25,7 +25,7 @@ type CallLogItem = {
   id: string;
   created_at: string;
   tool: string;
-  verdict: "ALLOW" | "ESCALATE" | "BLOCK" | "HITL";
+  verdict: "ALLOW" | "HITL" | "BLOCK";
   reasons: string[];
   primary_reason: string;
   risk_score: number;
@@ -62,7 +62,7 @@ function getChainStatusMessage(
 
 function Audit() {
   const qc = useQueryClient();
-  const [verdictFilter, setVerdictFilter] = useState<"ALL" | "ALLOW" | "ESCALATE" | "BLOCK">("ALL");
+  const [verdictFilter, setVerdictFilter] = useState<"ALL" | "ALLOW" | "HITL" | "BLOCK">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -109,7 +109,8 @@ function Audit() {
 
   const totalCount = callLogs.length;
   const allowCount = callLogs.filter((l) => l.verdict === "ALLOW").length;
-  const escalateCount = callLogs.filter((l) => l.verdict === "ESCALATE" || l.verdict === "HITL").length;
+  // Count both HITL and legacy ESCALATE rows (pre-migration DB records)
+  const escalateCount = callLogs.filter((l) => l.verdict === "HITL" || (l.verdict as string) === "ESCALATE").length;
   const blockCount = callLogs.filter((l) => l.verdict === "BLOCK").length;
 
   return (
@@ -196,7 +197,7 @@ function Audit() {
         </div>
 
         <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
-          {(["ALL", "ALLOW", "ESCALATE", "BLOCK"] as const).map((v) => (
+          {(["ALL", "ALLOW", "HITL", "BLOCK"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setVerdictFilter(v)}
@@ -206,7 +207,7 @@ function Audit() {
                   : "text-slate-400 hover:text-white"
               }`}
             >
-              {v === "ALL" ? "All" : v === "ALLOW" ? "Allowed" : v === "ESCALATE" ? "Escalated" : "Blocked"}
+              {v === "ALL" ? "All" : v === "ALLOW" ? "Allowed" : v === "HITL" ? "HITL" : "Blocked"}
             </button>
           ))}
         </div>
@@ -238,7 +239,7 @@ function Audit() {
                 {filteredLogs.map((log) => {
                   const isExpanded = expandedId === log.id;
                   const isAllow = log.verdict === "ALLOW";
-                  const isEscalate = log.verdict === "ESCALATE" || log.verdict === "HITL";
+                  const isEscalate = log.verdict === "HITL" || (log.verdict as string) === "ESCALATE";
 
                   return (
                     <Fragment key={log.id}>

@@ -55,7 +55,7 @@ function Dashboard() {
 
   const counts = {
     allow: decisions.filter((d) => d.verdict === "ALLOW").length,
-    escalate: decisions.filter((d) => d.verdict === "ESCALATE").length,
+    escalate: decisions.filter((d) => d.verdict === "HITL").length,
     block: decisions.filter((d) => d.verdict === "BLOCK").length,
     denied: approvals.filter((a) => a.status === "denied").length,
     approved: approvals.filter((a) => a.status === "approved").length,
@@ -134,7 +134,7 @@ function Dashboard() {
                 const colorClass =
                   d.verdict === "BLOCK"
                     ? "text-danger/70"
-                    : d.verdict === "ESCALATE"
+                    : d.verdict === "HITL"
                     ? "text-warn/70"
                     : "text-gray-500";
 

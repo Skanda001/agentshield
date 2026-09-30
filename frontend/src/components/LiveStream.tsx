@@ -43,7 +43,7 @@ export default function LiveStream() {
             const colorClass =
               d.verdict === "BLOCK"
                 ? "text-danger/70"
-                : d.verdict === "ESCALATE"
+                : d.verdict === "HITL"
                 ? "text-warn/70"
                 : "text-gray-500";
             return (

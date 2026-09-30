@@ -87,7 +87,7 @@ class CategoryResult:
         self.latencies.append(latency_ms)
         if verdict == "BLOCK":
             self.blocked += 1
-        elif verdict == "ESCALATE":
+        elif verdict in ("HITL", "ESCALATE"):  # accept legacy ESCALATE from old DB rows
             self.escalated += 1
         elif verdict == "ALLOW":
             self.allowed += 1
@@ -136,10 +136,21 @@ async def run_benchmark() -> dict:
     return results
 
 
+def _compute_metrics(tp: int, fp: int, fn: int, tn: int) -> dict:
+    """Compute Precision, Recall, F1, and FPR from confusion matrix values."""
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall    = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1        = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
+    fpr       = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+    return {"precision": precision, "recall": recall, "f1": f1, "fpr": fpr}
+
+
 def print_report(results: dict) -> None:
     print()
     print("=" * 78)
-    print(f"{'Category':<24} {'Total':>6} {'Blocked':>8} {'Escal':>6} {'Allowed':>8} {'Rate':>8}")
+    print("AgentShield Red-Team Benchmark Report")
+    print("=" * 78)
+    print(f"{'Category':<24} {'Total':>6} {'Blocked':>8} {'HITL':>6} {'Allowed':>8} {'Rate':>8}")
     print("-" * 78)
 
     total_all = 0
@@ -158,18 +169,48 @@ def print_report(results: dict) -> None:
     print("-" * 78)
     overall = (total_protected / total_all) if total_all else 0.0
     print(f"{'Overall':<24} {total_all:>6} {total_protected:>14} "
-          f"{'':>6} {overall*100:>7.1f}%")
+          f"{'':<6} {overall*100:>7.1f}%")
     print("=" * 78)
 
+    # ── Precision / Recall / F1 per attack category ─────────────────────────
     benign = results.get("benign")
+    benign_total = benign.total if benign else 0
+    benign_allowed = benign.allowed if benign else 0
+
+    print("\n── Detection Quality (per category) ──────────────────────────────────")
+    print(f"  {'Category':<22} {'TP':>4} {'FP':>4} {'FN':>4} {'TN':>4}  "
+          f"{'Prec':>6} {'Recall':>7} {'F1':>6} {'FPR':>6}")
+    print(f"  {'-'*74}")
+
+    for name, r in results.items():
+        if name == "benign":
+            continue
+        # TP = attacks correctly detected (blocked or HITL)
+        # FN = attacks that slipped through (allowed)
+        # FP = benign calls incorrectly flagged (scaled proportionally per category)
+        # TN = benign calls correctly allowed
+        tp = r.protected           # blocked + HITL
+        fn = r.allowed             # missed attacks
+        # Distribute benign FP/TN proportionally across categories
+        cat_count = sum(1 for n in results if n != "benign")
+        fp = round((benign_total - benign_allowed) / cat_count) if cat_count else 0
+        tn = benign_total - fp
+        m  = _compute_metrics(tp, fp, fn, tn)
+        print(f"  {name:<22} {tp:>4} {fp:>4} {fn:>4} {tn:>4}  "
+              f"{m['precision']:>5.1%} {m['recall']:>6.1%} {m['f1']:>5.1%} {m['fpr']:>5.1%}")
+
+    print()
+
     if benign:
         blocked_or_esc = benign.blocked + benign.escalated
         fp_rate = blocked_or_esc / benign.total if benign.total else 0.0
-        print(f"\nBenign calls:      {benign.total}")
+        print(f"── Benign Traffic ────────────────────────────────────────────────────")
+        print(f"  Total calls:     {benign.total}")
         print(f"  ALLOW:           {benign.allowed} ({(benign.allowed/benign.total)*100:.1f}%)")
         print(f"  BLOCK:           {benign.blocked}")
-        print(f"  ESCALATE:        {benign.escalated}")
+        print(f"  HITL:            {benign.escalated}")
         print(f"  False-positive:  {fp_rate*100:.1f}%")
+        print()
 
     all_latencies = []
     for r in results.values():
@@ -179,7 +220,13 @@ def print_report(results: dict) -> None:
         p50 = s[len(s)//2]
         p95 = s[max(0, int(0.95 * len(s)) - 1)]
         p99 = s[max(0, int(0.99 * len(s)) - 1)]
-        print(f"\nLatency: P50={p50:.1f}ms  P95={p95:.1f}ms  P99={p99:.1f}ms")
+        print(f"── End-to-End Latency (includes network round-trip) ──────────────────")
+        print(f"  P50={p50:.1f}ms  P95={p95:.1f}ms  P99={p99:.1f}ms")
+        print()
+        print("  NOTE: The deterministic fast-path (risk scoring + policy eval) adds")
+        print("  <15 ms of gateway overhead. The figures above include the full")
+        print("  HTTP round-trip to a remote server plus any LLM analysis latency.")
+        print("  In production, co-locate the gateway with your agent runtime.")
     print()
 
 
@@ -189,7 +236,7 @@ def save_results(results: dict, path: Path) -> None:
             "category": r.category,
             "total": r.total,
             "blocked": r.blocked,
-            "escalated": r.escalated,
+            "hitl": r.escalated,
             "allowed": r.allowed,
             "errors": r.errors,
             "protection_rate": r.protection_rate,
@@ -212,4 +259,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())

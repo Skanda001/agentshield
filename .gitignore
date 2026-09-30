@@ -39,3 +39,9 @@ postgresqlneondb_*.txt
 
 # Dynamic runtime mounted agents
 plugged_agents/
+
+# Python build artifacts
+*.egg-info/
+*.dist-info/
+dist/
+build/
