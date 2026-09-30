@@ -127,8 +127,17 @@ class StandaloneCRM:
                     items TEXT
                 );
             """)
-            # Try to populate from real PostgreSQL database if available
-            pg_loaded = False
+            # 1. ALWAYS seed all customers from 1000 to 2000 inclusive
+            cust_rows = [build_customer_record(cid) for cid in range(1000, 2001)]
+            order_rows = []
+            for cid in range(1000, 2001):
+                order_rows.extend(build_order_records(cid))
+
+            cur.executemany("INSERT OR REPLACE INTO customers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", cust_rows)
+            cur.executemany("INSERT OR REPLACE INTO orders VALUES (?, ?, ?, ?, ?, ?)", order_rows)
+            self._conn.commit()
+
+            # 2. Try to overlay from real PostgreSQL database if available
             try:
                 import os, psycopg
                 db_url = os.getenv("DATABASE_URL", "postgresql://agentshield:agentshield@localhost:5433/agentshield")
@@ -148,20 +157,8 @@ class StandaloneCRM:
                             if o_rows:
                                 cur.executemany("INSERT OR REPLACE INTO orders VALUES (?, ?, ?, ?, ?, ?)", o_rows)
                             self._conn.commit()
-                            pg_loaded = True
             except Exception:
                 pass
-
-            if not pg_loaded:
-                # Seed all customers from 1000 to 2000 inclusive
-                cust_rows = [build_customer_record(cid) for cid in range(1000, 2001)]
-                order_rows = []
-                for cid in range(1000, 2001):
-                    order_rows.extend(build_order_records(cid))
-
-                cur.executemany("INSERT OR REPLACE INTO customers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", cust_rows)
-                cur.executemany("INSERT OR REPLACE INTO orders VALUES (?, ?, ?, ?, ?, ?)", order_rows)
-                self._conn.commit()
 
     def search_by_email(self, email: str) -> Optional[dict[str, Any]]:
         clean_email = email.strip()

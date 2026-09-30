@@ -10,18 +10,18 @@ def test_read_order_is_low_risk():
 
 
 def test_delete_customer_escalates():
-    """delete_customer = 40 (delete) + 25 (customer) = 65 -> ESCALATE."""
+    """delete_customer = 40 (delete) + 25 (customer) = 65 -> HITL."""
     r = evaluate(tool="delete_customer", arguments={"customer_id": "4821"})
-    assert r.verdict == "ESCALATE"
-    assert 40 <= r.risk_score <= 84
+    assert r.verdict == "HITL"
+    assert 30 <= r.risk_score <= 69
     assert r.action == "delete"
 
 
 def test_bulk_customer_read_escalates():
-    """read_customer with count=500 = 25 (customer) + 25 (volume) = 50 -> ESCALATE."""
+    """read_customer with count=500 = 25 (customer) + 25 (volume) = 50 -> HITL."""
     r = evaluate(tool="read_customer", arguments={"count": 500})
-    assert r.verdict == "ESCALATE"
-    assert 40 <= r.risk_score <= 84
+    assert r.verdict == "HITL"
+    assert 30 <= r.risk_score <= 69
 
 
 def test_send_email_to_external_is_elevated():

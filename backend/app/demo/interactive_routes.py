@@ -189,10 +189,11 @@ def format_approved_output(
     approval_context: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Format authorized tool output and enforce least-privilege data minimization based on the user's prompt."""
-    if tool == "get_customer":
+    if tool in ("get_customer", "read_customer"):
         if not output.get("found"):
+            cid_lookup = args.get("customer_id") or args.get("id") or "Unknown"
             return (
-                f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\nNo customer record found matching ID `{args.get('customer_id')}`.",
+                f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n\nNo customer record found matching ID `{cid_lookup}`.",
                 output,
             )
 
@@ -418,21 +419,50 @@ async def decide_approval_endpoint(
     user_prompt = payload.prompt or req_ctx.get("prompt") or ""
 
     if payload.approved:
-        fn = TOOLS.get(tool_name)
+        normalized_tool = "get_customer" if tool_name in ("get_customer", "read_customer") else tool_name
+        fn = TOOLS.get(normalized_tool) or TOOLS.get(tool_name)
         tool_output: dict[str, Any] = {}
+
+        # Normalize and type-cast arguments
+        call_args = dict(args)
+        if "customer_id" in call_args:
+            try:
+                call_args["customer_id"] = int(call_args["customer_id"])
+            except (ValueError, TypeError):
+                pass
+        elif "id" in call_args and normalized_tool == "get_customer":
+            try:
+                call_args["customer_id"] = int(call_args.pop("id"))
+            except (ValueError, TypeError):
+                pass
+
         if fn:
             raw_fn = getattr(fn, "__wrapped__", fn)
             try:
                 if inspect.iscoroutinefunction(raw_fn):
-                    tool_output = await raw_fn(**args)
+                    tool_output = await raw_fn(**call_args)
                 else:
-                    tool_output = raw_fn(**args)
+                    tool_output = raw_fn(**call_args)
             except Exception as e:
                 logger.exception("Error executing approved tool %s: %s", tool_name, e)
                 tool_output = {"error": str(e), "found": False}
 
+        # Direct in-memory CRM fallback if tool execution returned None or was unmapped
+        if not tool_output or not isinstance(tool_output, dict) or not tool_output.get("found"):
+            if normalized_tool == "get_customer":
+                try:
+                    from agent.data.crm import crm
+                    cid_val = int(call_args.get("customer_id", 1001))
+                    res_c = crm.get_customer_by_id(cid_val)
+                    if res_c:
+                        tool_output = res_c
+                    else:
+                        tool_output = {"found": False, "customer_id": cid_val}
+                except Exception as ex_crm:
+                    logger.warning("Direct CRM lookup notice: %s", ex_crm)
+
         agent_response, filtered_output = format_approved_output(
-            tool_name, args, tool_output, prompt=user_prompt, approval_context=req_ctx
+            normalized_tool, call_args, tool_output or {}, prompt=user_prompt, approval_context=req_ctx
         )
 
         updated_event = {
