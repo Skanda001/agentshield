@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
-import { verifyAuditChain } from "@/lib/demoApi";
+import { verifyAuditChain } from "@/lib/auditApi";
 
 export default function AuditChainViz({ refreshKey }: { refreshKey: number }) {
   const { data, isLoading, isError } = useQuery({

@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/auth";
 
 const PAGE_TITLES: Record<string, string> = {
   "/app": "Dashboard",
-  "/app/demo": "Playground",
   "/app/plugins": "Agents",
   "/app/approvals": "Approvals",
   "/app/policies": "Policies",
