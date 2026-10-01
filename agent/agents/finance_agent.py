@@ -114,9 +114,14 @@ class FinancialAgent(BaseAgent):
             )
 
             if approved:
-                # Execute direct transfer
-                raw_out = transfer_funds_tool.__wrapped__(**tool_args) if hasattr(transfer_funds_tool, "__wrapped__") else {}
-                text = f"✅ **[AgentShield HITL Authorized]** Fund transfer of ${tool_args.get('amount')} authorized by supervisor."
+                tool_func_map = {
+                    "get_account_balance": get_balance_tool,
+                    "transfer_funds": transfer_funds_tool,
+                    "wire_funds_offshore": wire_funds_offshore_tool,
+                }
+                func = tool_func_map.get(tool_name)
+                raw_out = func.__wrapped__(**tool_args) if func and hasattr(func, "__wrapped__") else {}
+                text = f"✅ **[AgentShield HITL Authorized]** Action '{tool_name}' authorized by supervisor: {raw_out}"
                 return AgentResult(prompt=prompt, agent_name=self.name, status="escalated_and_approved", text=text, tool_calls=[record])
             else:
                 text = f"⛔ **[AgentShield HITL Denied]** Fund transfer was denied by supervisor ({note})."
