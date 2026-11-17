@@ -13,9 +13,13 @@ Each agent is an independent client application protected by the AgentShield sec
    - Handles accounting balances, treasury transfers, and payment processing.
    - Protected with financial policy controls and human-in-the-loop approvals.
 
-3. **Red Team Security Agent** (`security-redteam-agent/`):
-   - Executes simulated adversarial prompt injections and exfiltration attempts.
-   - Triggers AgentShield injection detection and automatic blocking.
+## Red-team testing
+
+There is no red-team agent in this directory. Adversarial testing lives in
+`backend/attack_library/` and is run with `backend/scripts/run_red_team.py`,
+which sends every attack in the library (and a set of benign calls) to
+`/api/v1/decide` and reports how many were blocked and how many were
+false positives.
 
 ## Plug In / Plug Out with AgentShield UI
 
