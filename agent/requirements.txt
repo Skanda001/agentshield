@@ -1,5 +1,9 @@
-# Standalone requirements for decoupled external agents
-agentshield>=0.1.0
+# Standalone requirements for decoupled external agents.
+# Run from the repository root:  pip install -r agent/requirements.txt
+#
+# The `shield` SDK is installed from this repo, never by bare name from PyPI:
+# the name "agentshield" on PyPI belongs to an unrelated project.
+./backend/sdk/python_sdk
 groq>=0.9.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0

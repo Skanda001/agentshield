@@ -6,9 +6,11 @@ that is missing a service the config expects, and so on. They read files only
 and need neither a database nor network access.
 """
 import re
+import tomllib
 from pathlib import Path
 
 import yaml
+from packaging.requirements import Requirement
 
 BACKEND = Path(__file__).resolve().parents[1]
 REPO = BACKEND.parent
@@ -84,3 +86,69 @@ def test_migration_docstrings_match_down_revision():
         "docstring 'Revises:' disagrees with down_revision "
         f"(revision, documented, actual): {mismatches}"
     )
+
+
+# --- SDK packaging -----------------------------------------------------------
+# These distribution names are owned by other projects on PyPI (checked
+# 2026-11-17). If our SDK, or a bare requirement, used one of them, `pip install`
+# would pull a stranger's package instead of ours.
+FOREIGN_PYPI_NAMES = {
+    "agentshield",
+    "agentshield-sdk",
+    "agentshield-client",
+    "agentshield-gateway-sdk",
+    "agentshield-guard",
+}
+SDK_DIR = BACKEND / "sdk" / "python_sdk"
+AGENT_DIR = REPO / "agent"
+
+
+def _canon(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _sdk_dist_name() -> str:
+    data = tomllib.loads((SDK_DIR / "pyproject.toml").read_text(encoding="utf-8"))
+    return _canon(data["project"]["name"])
+
+
+def test_sdk_dist_name_does_not_collide_with_foreign_pypi_package():
+    assert _sdk_dist_name() not in {_canon(n) for n in FOREIGN_PYPI_NAMES}
+
+
+def test_agent_requirements_install_sdk_from_local_path_not_pypi():
+    lines = [
+        raw.split("#")[0].strip()
+        for raw in (AGENT_DIR / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    ]
+    lines = [ln for ln in lines if ln]
+
+    # No bare name that PyPI could resolve to someone else's package.
+    unsafe = {_canon(n) for n in FOREIGN_PYPI_NAMES} | {_sdk_dist_name()}
+    for ln in lines:
+        if ln.startswith(("-", ".", "/")):
+            continue
+        assert _canon(Requirement(ln).name) not in unsafe, (
+            f"agent/requirements.txt resolves {ln!r} from PyPI; install the SDK from its path"
+        )
+
+    # ...and the SDK must actually be installed from this repo (path relative to repo root).
+    local = [ln for ln in lines if ln.startswith("./")]
+    assert any((REPO / ln).resolve() == SDK_DIR.resolve() for ln in local), (
+        "agent/requirements.txt must install the SDK from ./backend/sdk/python_sdk"
+    )
+
+
+def test_agent_pyproject_references_sdk_only_by_direct_url():
+    data = tomllib.loads((AGENT_DIR / "pyproject.toml").read_text(encoding="utf-8"))
+    sdk = _sdk_dist_name()
+    unsafe = {_canon(n) for n in FOREIGN_PYPI_NAMES} | {sdk}
+    seen_sdk = False
+    for dep in data["project"]["dependencies"]:
+        req = Requirement(dep)
+        name = _canon(req.name)
+        if name in unsafe:
+            assert name == sdk, f"agent depends on foreign PyPI package {req.name!r}"
+            assert req.url, f"{dep!r} must be a direct URL reference, not resolved from PyPI"
+            seen_sdk = True
+    assert seen_sdk, "agent/pyproject.toml must declare a dependency on the SDK"

@@ -9,7 +9,8 @@ description = "Pluggable external AI agents protected by AgentShield security ga
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "agentshield>=0.1.0",
+    # Direct reference on purpose: the bare name is not resolved from PyPI.
+    "agentshield-protect-sdk @ git+https://github.com/Skanda001/agentshield.git#subdirectory=backend/sdk/python_sdk",
     "groq>=0.9.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",

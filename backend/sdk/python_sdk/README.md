@@ -22,8 +22,15 @@ By decorating your tool functions with `@protect`, the SDK:
 
 ## 📦 Installation
 
+The distribution is named `agentshield-protect-sdk` and you import it as `shield`.
+It is not published to PyPI: install it from this repository. (The name
+`agentshield` on PyPI is an unrelated project, so do not `pip install agentshield`.)
+
 ```bash
-# Install locally in editable mode
+# From the repository root, editable install:
+pip install -e backend/sdk/python_sdk
+
+# Or from backend/:
 pip install -e sdk/python_sdk
 ```
 

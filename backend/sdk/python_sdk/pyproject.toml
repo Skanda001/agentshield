@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentshield"
+name = "agentshield-protect-sdk"
 version = "0.1.0"
 description = "Python SDK for AgentShield — security gateway for AI agents"
 requires-python = ">=3.10"

@@ -12,6 +12,20 @@ This package contains standalone AI agents that consume the **AgentShield** secu
 | **Real HTTP gateway call** | ✅ Yes | Every tool call sends `POST /api/v1/decide` |
 | **Multi-agent pluggability** | ✅ Yes | Discover and run any agent via `agent.get_agent(name)` |
 
+## Installation
+
+From the repository root (installs the `shield` SDK from `backend/sdk/python_sdk`,
+plus the agent's own dependencies):
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r agent/requirements.txt
+python -m agent --list
+```
+
+Do not `pip install agentshield`: that name on PyPI is an unrelated project and
+does not provide the `shield` module.
+
 ## Quickstart
 
 ```python
