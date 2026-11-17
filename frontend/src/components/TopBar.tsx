@@ -1,6 +1,6 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RefreshCw, Lock, Play } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -9,7 +9,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/app": "Dashboard",
   "/app/approvals": "Approvals",
   "/app/policies": "Policies",
-  "/app/audit": "Audit Log",
+  "/app/audit": "Audit & Compliance Desk",
   "/app/kill-switch": "Kill Switch",
 };
 
@@ -33,10 +33,18 @@ function pickScenarios(count: number) {
   return shuffled.slice(0, count);
 }
 
+/** URL-safe Base64 decode (handles Base64URL chars - and _, missing padding) */
+function b64UrlDecode(str: string): string {
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = base64.length % 4;
+  if (pad) base64 += "=".repeat(4 - pad);
+  return atob(base64);
+}
+
 /** Decode JWT payload safely, return null on failure */
 function decodeJwt(token: string): Record<string, unknown> | null {
   try {
-    return JSON.parse(atob(token.split(".")[1]));
+    return JSON.parse(b64UrlDecode(token.split(".")[1]));
   } catch {
     return null;
   }
@@ -49,14 +57,18 @@ export default function TopBar() {
   const path = location.pathname;
   const title = PAGE_TITLES[path] || "AgentShield";
 
-  const [auditValid, setAuditValid] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    api
-      .get("/audit/verify")
-      .then((res) => setAuditValid(res.data?.valid ?? true))
-      .catch(() => {});
-  }, [path]);
+  const { data: auditValid = null } = useQuery<boolean | null>({
+    queryKey: ["audit-verify"],
+    queryFn: async () => {
+      try {
+        const res = await api.get("/audit/verify");
+        return res.data?.valid ?? true;
+      } catch {
+        return null;
+      }
+    },
+    refetchInterval: 30000,
+  });
 
   // Fix #17: derive user display name from JWT
   const token = localStorage.getItem("token");
@@ -160,11 +172,20 @@ export default function TopBar() {
         {/* Chain verified badge */}
         <Link
           to="/app/audit"
-          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white transition-colors"
-          title="Audit chain integrity status"
+          className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-medium border transition-colors ${
+            auditValid === false
+              ? "bg-rose-950/40 border-rose-500/30 text-rose-300 hover:bg-rose-900/40"
+              : "bg-emerald-950/40 border-emerald-500/30 text-emerald-300 hover:bg-emerald-900/40"
+          }`}
+          title="Cryptographic audit chain integrity status"
         >
-          <Lock className="w-3 h-3 text-emerald-400" />
-          <span>Chain: {auditValid === false ? "Broken" : "Verified"}</span>
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              auditValid === false ? "bg-rose-400" : "bg-emerald-400 animate-pulse"
+            }`}
+          />
+          <Lock className="w-3 h-3" />
+          <span>LEDGER: {auditValid === false ? "BROKEN" : "100% VERIFIED"}</span>
         </Link>
 
         {/* Run Demo button */}

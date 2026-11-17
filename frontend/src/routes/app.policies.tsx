@@ -45,6 +45,14 @@ type PolicyVersion = {
   created_at: string;
 };
 
+/** URL-safe Base64 decode (handles Base64URL chars - and _, missing padding) */
+function b64UrlDecode(str: string): string {
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = base64.length % 4;
+  if (pad) base64 += "=".repeat(4 - pad);
+  return atob(base64);
+}
+
 function Policies() {
   const qc = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -58,7 +66,7 @@ function Policies() {
       const token = localStorage.getItem("token");
       if (!token) return [];
       try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
+        const payload = JSON.parse(b64UrlDecode(token.split(".")[1]));
         const tenantId = payload.tenant_id;
         return (await api.get(`/policies?tenant_id=${tenantId}`)).data;
       } catch {
@@ -71,7 +79,7 @@ function Policies() {
   const loadYaml = useMutation({
     mutationFn: async () => {
       const token = localStorage.getItem("token");
-      const payload = JSON.parse(atob(token!.split(".")[1]));
+      const payload = JSON.parse(b64UrlDecode(token!.split(".")[1]));
       const tenantId = payload.tenant_id;
       return api.post(
         `/policies/load-yaml?tenant_id=${tenantId}&file_path=${encodeURIComponent(

@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   { group: "Main", to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { group: "Security", to: "/app/approvals", label: "Approvals", icon: CheckCircle2, exact: false },
   { group: "Security", to: "/app/policies", label: "Policies", icon: FileText, exact: false },
-  { group: "Security", to: "/app/audit", label: "Audit Log", icon: ScrollText, exact: false },
+  { group: "Security", to: "/app/audit", label: "Audit & Compliance", icon: ScrollText, exact: false },
   { group: "Security", to: "/app/kill-switch", label: "Kill Switch", icon: Zap, exact: false },
 ];
 

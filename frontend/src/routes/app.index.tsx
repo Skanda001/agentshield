@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ShieldCheck, ShieldX, AlertTriangle, UserCheck, ChevronRight, Sparkles, Terminal, Shield } from "lucide-react";
-import { useState } from "react";
+import { ShieldCheck, ShieldX, AlertTriangle, ChevronRight, Sparkles, Terminal, Shield } from "lucide-react";
+import { Fragment, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import AuditStatusCard from "@/components/AuditStatusCard";
@@ -143,10 +143,9 @@ function Dashboard() {
                     : "text-gray-500";
 
                 return (
-                  <>
+                  <Fragment key={d.id}>
                     {/* Fix #11: clickable row */}
                     <tr
-                      key={d.id}
                       onClick={() =>
                         setExpandedDecisionId(isExpanded ? null : d.id)
                       }
@@ -363,7 +362,7 @@ function Dashboard() {
                         </tr>
                       );
                     })()}
-                  </>
+                  </Fragment>
                 );
               })}
               {decisions.length === 0 && (

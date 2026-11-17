@@ -55,6 +55,8 @@ function Approvals() {
     refetchInterval: 5000,
   });
 
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+
   const decide = useMutation({
     mutationFn: async ({
       id,
@@ -62,17 +64,22 @@ function Approvals() {
     }: {
       id: string;
       approved: boolean;
-    }) =>
-      api.post(`/approvals/${id}/decide`, {
+    }) => {
+      setDecidingId(id);
+      return api.post(`/approvals/${id}/decide`, {
         approved,
         decided_by: "ui-operator",
         note: approved ? "Approved via UI" : "Denied via UI",
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["approvals"] });
       qc.invalidateQueries({ queryKey: ["approvals-all"] });
       qc.invalidateQueries({ queryKey: ["decisions"] });
       qc.invalidateQueries({ queryKey: ["audit-verify"] });
+    },
+    onSettled: () => {
+      setDecidingId(null);
     },
   });
 
@@ -131,8 +138,10 @@ function Approvals() {
               <div className="flex gap-2">
                 <button
                   onClick={() =>
-                    approvals.forEach((a) =>
-                      decide.mutate({ id: a.id, approved: true })
+                    Promise.all(
+                      approvals.map((a) =>
+                        decide.mutateAsync({ id: a.id, approved: true })
+                      )
                     )
                   }
                   disabled={decide.isPending}
@@ -143,8 +152,10 @@ function Approvals() {
                 </button>
                 <button
                   onClick={() =>
-                    approvals.forEach((a) =>
-                      decide.mutate({ id: a.id, approved: false })
+                    Promise.all(
+                      approvals.map((a) =>
+                        decide.mutateAsync({ id: a.id, approved: false })
+                      )
                     )
                   }
                   disabled={decide.isPending}
@@ -162,7 +173,7 @@ function Approvals() {
               key={a.id}
               approval={a}
               onDecide={(approved) => decide.mutate({ id: a.id, approved })}
-              deciding={decide.isPending}
+              deciding={decidingId === a.id}
             />
           ))}
         </div>

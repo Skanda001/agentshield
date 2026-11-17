@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useMemo, useCallback } from "react";
 import { api } from "./api";
 
 type AuthContextType = {
@@ -19,13 +19,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     !!localStorage.getItem("token")
   );
 
-  const login = async (apiKey: string) => {
+  const login = useCallback(async (apiKey: string) => {
     const r = await api.post("/agents/token", { api_key: apiKey });
     localStorage.setItem("token", r.data.access_token);
     setIsAuthenticated(true);
-  };
+  }, []);
 
-  const tryDemo = async () => {
+  const tryDemo = useCallback(async () => {
     const suffix = uniqueSuffix();
 
     // 1. Create tenant
@@ -58,16 +58,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setIsAuthenticated(true);
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("token");
     setIsAuthenticated(false);
     window.location.href = "/";
-  };
+  }, []);
+
+  const value = useMemo(
+    () => ({ isAuthenticated, login, tryDemo, logout }),
+    [isAuthenticated, login, tryDemo, logout]
+  );
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, tryDemo, logout }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
