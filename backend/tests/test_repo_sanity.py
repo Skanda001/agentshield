@@ -49,3 +49,38 @@ def test_dev_compose_provides_redis_for_env_example():
     assert port in _published_host_ports(services["redis"]), (
         f"redis service does not publish host port {port} used by .env.example"
     )
+
+
+def _alembic_script_dir():
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    cfg = Config(str(BACKEND / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND / "alembic"))
+    return ScriptDirectory.from_config(cfg)
+
+
+def test_alembic_has_a_single_head():
+    """Two heads means a forked history and `alembic upgrade head` is ambiguous."""
+    heads = _alembic_script_dir().get_heads()
+    assert len(heads) == 1, f"expected exactly one alembic head, found {heads}"
+
+
+def test_migration_docstrings_match_down_revision():
+    """The `Revises:` line in each migration docstring must match `down_revision`.
+
+    Alembic only reads the Python variable, so a stale docstring is silently
+    wrong and misleads anyone reading the history.
+    """
+    mismatches = []
+    for rev in _alembic_script_dir().walk_revisions():
+        doc = rev.module.__doc__ or ""
+        found = re.search(r"^Revises:[ \t]*(\S*)[ \t]*$", doc, re.M)
+        assert found, f"{rev.revision}: docstring has no 'Revises:' line"
+        documented = found.group(1) or None
+        if documented != rev.down_revision:
+            mismatches.append((rev.revision, documented, rev.down_revision))
+    assert not mismatches, (
+        "docstring 'Revises:' disagrees with down_revision "
+        f"(revision, documented, actual): {mismatches}"
+    )

@@ -1,7 +1,7 @@
 """Migrate ESCALATE → HITL in decisions.verdict.
 
 Revision ID: a1b2c3d4e5f6
-Revises: bfafc46d2ee7
+Revises: 0541f0aff3f1
 Create Date: 2026-09-30
 
 Background
