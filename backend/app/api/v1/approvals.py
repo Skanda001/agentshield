@@ -11,10 +11,23 @@ from app.services import approval_service as svc
 
 router = APIRouter(tags=["approvals"])
 
+_APPROVER_SCOPES = {"approver", "admin", "superadmin"}
+
+
+def _require_approver(agent) -> None:
+    """Ensure agent has approver or admin scope."""
+    agent_scopes = set(agent.scopes or [])
+    if not agent_scopes.intersection(_APPROVER_SCOPES):
+        raise HTTPException(
+            status_code=403,
+            detail="Approver or admin scope required to decide approvals",
+        )
+
+
 
 @router.get("/approvals", response_model=list[ApprovalOut])
 async def list_approvals(
-    status: Optional[str] = Query(default=None, pattern=r"^(pending|approved|denied|expired)$"),
+    status: Optional[str] = Query(default=None, pattern=r"^(pending|approved|denied|expired|used)$"),
     limit: int = Query(default=50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     agent=Depends(get_current_agent),
@@ -44,6 +57,8 @@ async def decide(
     db: AsyncSession = Depends(get_db),
     agent=Depends(get_current_agent),
 ):
+    _require_approver(agent)
+
     approval = await svc.get_approval(db, approval_id)
 
     # 404 for missing OR cross-tenant (don't leak existence to other tenants)

@@ -16,13 +16,24 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.deps import get_db, get_optional_agent
+from app.core.deps import get_current_agent, get_db
 from app.db.models.agent import Agent
 from app.db.models.decision import Decision
 from app.services import supabase_logger
 
 logger = logging.getLogger("agentshield.supabase.api")
 router = APIRouter(prefix="/supabase", tags=["supabase"])
+
+_ADMIN_SCOPES = {"admin", "superadmin"}
+
+
+def _require_admin(agent: Agent) -> None:
+    agent_scopes = set(agent.scopes or [])
+    if not agent_scopes.intersection(_ADMIN_SCOPES):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin scope required for Supabase operations",
+        )
 
 
 class SupabaseConfigRequest(BaseModel):
@@ -59,13 +70,16 @@ class SupabaseStatusResponse(BaseModel):
 
 
 @router.get("/status", response_model=SupabaseStatusResponse)
-async def get_supabase_status(db: AsyncSession = Depends(get_db)):
-    """Check configuration and call breakdown for Supabase logging."""
-    res = await db.execute(select(Decision))
+async def get_supabase_status(
+    db: AsyncSession = Depends(get_db),
+    agent: Agent = Depends(get_current_agent),
+):
+    """Check configuration and call breakdown for Supabase logging scoped to caller's tenant."""
+    res = await db.execute(select(Decision).where(Decision.tenant_id == agent.tenant_id))
     all_decisions = list(res.scalars().all())
 
     allowed = sum(1 for d in all_decisions if d.verdict == "ALLOW")
-    escalated = sum(1 for d in all_decisions if d.verdict == "ESCALATE")
+    escalated = sum(1 for d in all_decisions if d.verdict in ("ESCALATE", "HITL"))
     blocked = sum(1 for d in all_decisions if d.verdict == "BLOCK")
 
     is_configured = bool(settings.SUPABASE_URL and settings.SUPABASE_KEY)
@@ -95,7 +109,9 @@ async def get_supabase_status(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/schema")
-async def get_sql_schema():
+async def get_sql_schema(
+    agent: Agent = Depends(get_current_agent),
+):
     """Return the SQL schema to execute in Supabase SQL Editor."""
     return {
         "table": settings.SUPABASE_TABLE,
@@ -105,15 +121,23 @@ async def get_sql_schema():
 
 @router.get("/logs", response_model=list[CallLogItem])
 async def list_call_logs(
-    verdict: Optional[str] = Query(default=None, pattern=r"^(ALLOW|ESCALATE|BLOCK)$"),
+    verdict: Optional[str] = Query(default=None, pattern=r"^(ALLOW|ESCALATE|HITL|BLOCK)$"),
     tool: Optional[str] = None,
     limit: int = Query(default=100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
+    agent: Agent = Depends(get_current_agent),
 ):
-    """Retrieve all logged calls with verdicts and explainability reasons."""
-    stmt = select(Decision).order_by(desc(Decision.created_at))
+    """Retrieve logged calls for the caller's tenant with verdicts and explainability reasons."""
+    stmt = (
+        select(Decision)
+        .where(Decision.tenant_id == agent.tenant_id)
+        .order_by(desc(Decision.created_at))
+    )
     if verdict:
-        stmt = stmt.where(Decision.verdict == verdict)
+        if verdict in ("ESCALATE", "HITL"):
+            stmt = stmt.where(Decision.verdict.in_(["ESCALATE", "HITL"]))
+        else:
+            stmt = stmt.where(Decision.verdict == verdict)
     if tool:
         stmt = stmt.where(Decision.tool == tool)
 
@@ -147,8 +171,11 @@ async def list_call_logs(
 @router.post("/config")
 async def update_supabase_config(
     payload: SupabaseConfigRequest,
+    agent: Agent = Depends(get_current_agent),
 ):
-    """Update Supabase credentials and verify connection."""
+    """Update Supabase credentials and verify connection. Requires admin scope."""
+    _require_admin(agent)
+
     settings.SUPABASE_URL = payload.supabase_url.strip()
     settings.SUPABASE_KEY = payload.supabase_key.strip()
     settings.SUPABASE_TABLE = payload.supabase_table.strip()
@@ -171,8 +198,11 @@ async def update_supabase_config(
 @router.post("/sync")
 async def trigger_supabase_sync(
     db: AsyncSession = Depends(get_db),
+    agent: Agent = Depends(get_current_agent),
 ):
-    """Sync all decisions from database to Supabase."""
+    """Sync decisions for caller's tenant into Supabase. Requires admin scope."""
+    _require_admin(agent)
+
     if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
         raise HTTPException(
             status_code=400,

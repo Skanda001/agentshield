@@ -42,11 +42,11 @@ CREATE INDEX IF NOT EXISTS idx_call_logs_created_at ON agentshield_call_logs(cre
 
 ALTER TABLE agentshield_call_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read access to call logs" 
-ON agentshield_call_logs FOR SELECT USING (true);
+CREATE POLICY "Service role insert only" 
+ON agentshield_call_logs FOR INSERT TO service_role WITH CHECK (true);
 
-CREATE POLICY "Allow insert access to call logs" 
-ON agentshield_call_logs FOR INSERT WITH CHECK (true);
+CREATE POLICY "Service role select only" 
+ON agentshield_call_logs FOR SELECT TO service_role USING (true);
 """
 
 
@@ -66,13 +66,19 @@ def generate_groq_explanation(
     risk_score: float,
     arguments: Optional[dict[str, Any]] = None,
 ) -> str:
-    """Generate a concise 1-2 sentence explanation of why this call was ALLOWED, BLOCKED, or ESCALATED using Groq."""
+    """Generate a concise 1-2 sentence explanation of why this call was ALLOWED, BLOCKED, or ESCALATED using Groq.
+
+    Never sends raw PII to Groq: reasons and arguments are masked before prompt generation.
+    """
+    from app.detection.pii.masker import mask_pii_in_data
+
+    masked_reasons, _ = mask_pii_in_data(reasons or [])
     groq_api_key = settings.GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
     if groq_api_key:
         try:
             from groq import Groq
             client = Groq(api_key=groq_api_key)
-            r_str = ", ".join(reasons) if reasons else "Security policy check"
+            r_str = ", ".join(masked_reasons) if masked_reasons else "Security policy check"
             prompt = (
                 "You are an AI security explanation engine for AgentShield.\n"
                 f"In 1-2 clear, direct sentences, explain why this tool execution was {verdict}:\n"

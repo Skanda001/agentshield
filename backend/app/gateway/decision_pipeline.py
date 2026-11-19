@@ -42,61 +42,127 @@ async def run(
 
     # ── 0a. Check HITL Approval (Execution Resume) ───────────
     if normalized.approval_id:
+        from datetime import datetime, timezone
         from uuid import UUID as _UUID
         from sqlalchemy import select
+        from app.core.crypto import canonical_json, sha256_hex
         from app.db.models.approval import Approval
+
+        rejection_reason = None
         try:
             appr_uuid = _UUID(str(normalized.approval_id))
+        except (ValueError, TypeError, AttributeError):
+            rejection_reason = "Invalid approval_id format"
+            appr_uuid = None
+
+        approved_obj = None
+        if appr_uuid:
+            # Row lock with_for_update to atomically check and consume the approval
             appr_res = await db.execute(
                 select(Approval).where(
                     Approval.id == appr_uuid,
                     Approval.tenant_id == agent.tenant_id,
-                    Approval.status == "approved",
-                )
+                ).with_for_update()
             )
             approved_obj = appr_res.scalar_one_or_none()
-            if approved_obj:
-                decision = Decision(
-                    agent_id=agent.id,
-                    tenant_id=agent.tenant_id,
-                    tool=normalized.tool,
-                    action=sig.action,
-                    resource_type=sig.resource_type,
-                    arguments=normalized.arguments,
-                    verdict="ALLOW",
-                    risk_score=0.0,
-                    reasons=[f"Authorized via supervisor sign-off ({approved_obj.decided_by}): {approved_obj.decision_note or 'Manual approval'}"],
-                    signals=[],
-                    injection_score=sig.injection_score,
-                    pii_classification=sig.pii_classification,
-                    pii_labels=sig.pii_labels,
-                    note=f"resumed_from_approval={approved_obj.id}",
-                )
-                db.add(decision)
-                await db.flush()
-                await audit_chain.append_event(
-                    db,
-                    event_type="decision.made",
-                    payload={
-                        "decision_id": str(decision.id),
-                        "tool": decision.tool,
-                        "verdict": decision.verdict,
-                        "risk_score": decision.risk_score,
-                        "reasons": decision.reasons,
-                        "agent_name": agent.name,
-                        "resumed_from_approval": str(approved_obj.id),
-                    },
-                    agent_id=agent.id,
-                    tenant_id=agent.tenant_id,
-                )
-                await db.commit()
-                await db.refresh(decision)
-                return PipelineResult(
-                    decision=decision,
-                    response=_to_response(decision, approval_id=approved_obj.id),
-                )
-        except Exception:
-            pass  # Fall through to standard pipeline if invalid UUID
+
+            if not approved_obj:
+                rejection_reason = "Approval not found or belongs to another tenant"
+            elif approved_obj.status == "used":
+                rejection_reason = "Approval has already been used (single-use constraint)"
+            elif approved_obj.status != "approved":
+                rejection_reason = f"Approval is not approved (status: {approved_obj.status})"
+            elif approved_obj.expires_at <= datetime.now(timezone.utc):
+                approved_obj.status = "expired"
+                rejection_reason = "Approval has expired"
+            else:
+                # Bind approval to the exact call it was granted for
+                orig_args = approved_obj.request_context.get("arguments", {})
+                orig_hash = sha256_hex(canonical_json({"tool": approved_obj.tool, "arguments": orig_args}))
+                call_hash = sha256_hex(canonical_json({"tool": normalized.tool, "arguments": normalized.arguments}))
+                if approved_obj.tool != normalized.tool or orig_hash != call_hash:
+                    rejection_reason = "Approval call arguments or tool mismatch"
+
+        if rejection_reason:
+            decision = Decision(
+                agent_id=agent.id,
+                tenant_id=agent.tenant_id,
+                tool=normalized.tool,
+                action=sig.action,
+                resource_type=sig.resource_type,
+                arguments=normalized.arguments,
+                verdict="BLOCK",
+                risk_score=100.0,
+                reasons=[f"Approval rejected: {rejection_reason}"],
+                signals=[],
+                injection_score=sig.injection_score,
+                pii_classification=sig.pii_classification,
+                pii_labels=sig.pii_labels,
+                note=f"failed_approval_id={normalized.approval_id}",
+            )
+            db.add(decision)
+            await db.flush()
+            await audit_chain.append_event(
+                db,
+                event_type="decision.made",
+                payload={
+                    "decision_id": str(decision.id),
+                    "tool": decision.tool,
+                    "verdict": decision.verdict,
+                    "risk_score": decision.risk_score,
+                    "reasons": decision.reasons,
+                    "agent_name": agent.name,
+                    "rejection_reason": rejection_reason,
+                    "approval_id": str(normalized.approval_id),
+                },
+                agent_id=agent.id,
+                tenant_id=agent.tenant_id,
+            )
+            await db.commit()
+            await db.refresh(decision)
+            return PipelineResult(decision=decision, response=_to_response(decision))
+
+        # Successfully authorized — consume the approval atomically (single-use)
+        approved_obj.status = "used"
+        decision = Decision(
+            agent_id=agent.id,
+            tenant_id=agent.tenant_id,
+            tool=normalized.tool,
+            action=sig.action,
+            resource_type=sig.resource_type,
+            arguments=normalized.arguments,
+            verdict="ALLOW",
+            risk_score=0.0,
+            reasons=[f"Authorized via supervisor sign-off ({approved_obj.decided_by}): {approved_obj.decision_note or 'Manual approval'}"],
+            signals=[],
+            injection_score=sig.injection_score,
+            pii_classification=sig.pii_classification,
+            pii_labels=sig.pii_labels,
+            note=f"resumed_from_approval={approved_obj.id}",
+        )
+        db.add(decision)
+        await db.flush()
+        await audit_chain.append_event(
+            db,
+            event_type="decision.made",
+            payload={
+                "decision_id": str(decision.id),
+                "tool": decision.tool,
+                "verdict": decision.verdict,
+                "risk_score": decision.risk_score,
+                "reasons": decision.reasons,
+                "agent_name": agent.name,
+                "resumed_from_approval": str(approved_obj.id),
+            },
+            agent_id=agent.id,
+            tenant_id=agent.tenant_id,
+        )
+        await db.commit()
+        await db.refresh(decision)
+        return PipelineResult(
+            decision=decision,
+            response=_to_response(decision, approval_id=approved_obj.id),
+        )
 
     # ── In-flight PII Masking ────────────────────────────────
     from app.detection.pii.masker import mask_pii_in_data

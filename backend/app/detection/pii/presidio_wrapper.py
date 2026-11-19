@@ -4,6 +4,9 @@ Uses deterministic recognizers (Indian PII + generic patterns like email,
 credit card, IBAN) and returns a unified result. Presidio is intentionally
 NOT used here to keep dependencies light and detection deterministic.
 A Presidio-based tier can be added later without changing this interface.
+
+Credit card detection uses the Luhn algorithm to avoid false positives
+from random digit strings (e.g., order IDs or long numeric identifiers).
 """
 import re
 from dataclasses import dataclass, field
@@ -18,6 +21,21 @@ _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _CREDIT_CARD_RE = re.compile(r"\b(?:\d[ -]*?){13,16}\b")
 _IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b")
 _IPV4_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+
+
+def _luhn_valid(number: str) -> bool:
+    """Return True if `number` (digits only) passes the Luhn checksum.
+
+    Eliminates false positives from random long digit strings such as
+    order IDs, timestamps, or Aadhaar numbers that happen to be 16 digits.
+    """
+    digits = [int(d) for d in number]
+    odd_digits = digits[-1::-2]
+    even_digits = digits[-2::-2]
+    total = sum(odd_digits)
+    for d in even_digits:
+        total += sum(divmod(d * 2, 10))
+    return total % 10 == 0
 
 
 # ─── Sensitivity classification ───────────────────────────────
@@ -90,8 +108,8 @@ def detect(arguments: dict[str, Any]) -> PIIDetectionResult:
         matches.append(PIIMatch("email", m.span(), m.group(0), 1.0))
     for m in _CREDIT_CARD_RE.finditer(text):
         raw = re.sub(r"[ -]", "", m.group(0))
-        if 13 <= len(raw) <= 16:
-            matches.append(PIIMatch("credit_card", m.span(), _redact(raw), 0.85))
+        if 13 <= len(raw) <= 16 and _luhn_valid(raw):
+            matches.append(PIIMatch("credit_card", m.span(), _redact(raw), 0.95))
     for m in _IBAN_RE.finditer(text):
         matches.append(PIIMatch("iban", m.span(), _redact(m.group(0)), 0.85))
     for m in _IPV4_RE.finditer(text):

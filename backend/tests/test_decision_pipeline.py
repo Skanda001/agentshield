@@ -120,17 +120,24 @@ async def test_policy_deny_blocks_delete_customer():
         assert inj["verdict"] in ("ESCALATE", "BLOCK")
 
     # ── cleanup ────────────────────────────────────────────────
-    async with AsyncSessionLocal() as db:
-        policy_ids = (
-            await db.execute(select(Policy.id).where(Policy.tenant_id == uuid.UUID(tenant_id)))
-        ).scalars().all()
+    try:
+        async with AsyncSessionLocal() as db:
+            policy_ids = (
+                await db.execute(select(Policy.id).where(Policy.tenant_id == uuid.UUID(tenant_id)))
+            ).scalars().all()
 
-        await db.execute(delete(Decision).where(Decision.tenant_id == uuid.UUID(tenant_id)))
-        if policy_ids:
-            await db.execute(
-                delete(PolicyVersion).where(PolicyVersion.policy_id.in_(policy_ids))
-            )
-        await db.execute(delete(Policy).where(Policy.tenant_id == uuid.UUID(tenant_id)))
-        await db.execute(delete(Agent).where(Agent.tenant_id == uuid.UUID(tenant_id)))
-        await db.execute(delete(Tenant).where(Tenant.id == uuid.UUID(tenant_id)))
-        await db.commit()
+            await db.execute(delete(Decision).where(Decision.tenant_id == uuid.UUID(tenant_id)))
+            if policy_ids:
+                await db.execute(
+                    delete(PolicyVersion).where(PolicyVersion.policy_id.in_(policy_ids))
+                )
+            await db.execute(delete(Policy).where(Policy.tenant_id == uuid.UUID(tenant_id)))
+            try:
+                await db.execute(delete(Agent).where(Agent.tenant_id == uuid.UUID(tenant_id)))
+                await db.execute(delete(Tenant).where(Tenant.id == uuid.UUID(tenant_id)))
+                await db.commit()
+            except Exception:
+                # Expected when append-only triggers protect audit_log from ON DELETE SET NULL cascades
+                await db.rollback()
+    except Exception:
+        pass

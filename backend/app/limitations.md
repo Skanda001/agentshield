@@ -60,11 +60,9 @@ A database administrator with direct write access can modify `audit_log` rows. T
 
 ## Infrastructure Gaps
 
-### 7. Supabase RLS overly permissive
+### 7. Supabase RLS restricted ✅
 
-`supabase_schema.sql` uses `USING (true)` / `WITH CHECK (true)` for all roles. This allows any authenticated Supabase user to insert or select from the call log table.
-
-**Fix required**: Restrict to service-role insert only; disable anonymous select.
+`supabase_schema.sql` and `supabase_logger.py` restrict RLS policies to `service_role` only (`FOR ALL TO service_role`). Anonymous read and insert are disabled. All Supabase proxy endpoints in `/api/v1/supabase` require agent JWT authentication with tenant scoping, and configuration updates require the `admin` scope. Outbound payloads to Groq and Supabase are stripped of raw tool arguments and PII is masked in-flight. Tests are in `tests/test_supabase_pii_flow.py`.
 
 ### 8. SDK fail-closed verified ✅
 

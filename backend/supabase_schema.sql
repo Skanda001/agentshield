@@ -20,14 +20,15 @@ CREATE INDEX IF NOT EXISTS idx_call_logs_created_at ON agentshield_call_logs(cre
 -- Enable Row Level Security (RLS)
 ALTER TABLE agentshield_call_logs ENABLE ROW LEVEL SECURITY;
 
--- Allow read access
-CREATE POLICY "Allow read access to call logs" 
-ON agentshield_call_logs 
-FOR SELECT 
-USING (true);
-
--- Allow insert access for service role or gateway
-CREATE POLICY "Allow insert access to call logs" 
+-- Restrict all access to service_role only (no anonymous SELECT or INSERT)
+CREATE POLICY "Service role insert only" 
 ON agentshield_call_logs 
 FOR INSERT 
+TO service_role
 WITH CHECK (true);
+
+CREATE POLICY "Service role select only" 
+ON agentshield_call_logs 
+FOR SELECT 
+TO service_role
+USING (true);

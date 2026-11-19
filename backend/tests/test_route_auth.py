@@ -20,6 +20,8 @@ from app.core.deps import get_current_agent, get_optional_agent
 # Routes that are intentionally open (no auth required).
 # Format: (method, path)  — exact match.
 OPEN_ROUTES: set[tuple[str, str]] = {
+    # Root ping endpoint
+    ("GET", "/"),
     # Health check — must be open for load-balancer probes
     ("GET", "/api/v1/health"),
     # Token exchange — takes an API key, cannot require a JWT first
@@ -31,9 +33,6 @@ OPEN_ROUTES: set[tuple[str, str]] = {
     ("GET", "/docs"),
     ("GET", "/openapi.json"),
     ("GET", "/redoc"),
-    # WebSocket demo — handled separately; documented in threat_model.md
-    ("GET", "/ws/demo"),
-    ("GET", "/api/v1/ws/demo"),
 }
 
 
