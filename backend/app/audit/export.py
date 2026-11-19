@@ -3,8 +3,8 @@
 Includes the events plus a manifest with integrity metadata so an
 external party can independently verify the chain later.
 """
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +16,8 @@ from app.audit.verifier import verify_chain
 async def export_evidence(
     db: AsyncSession,
     *,
-    agent_id: Optional[UUID] = None,
-    tenant_id: Optional[UUID] = None,
+    agent_id: UUID | None = None,
+    tenant_id: UUID | None = None,
     limit: int = 500,
 ) -> dict[str, Any]:
     events = await list_events(db, limit=limit, agent_id=agent_id, tenant_id=tenant_id)
@@ -26,7 +26,7 @@ async def export_evidence(
 
     return {
         "manifest": {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "agent_id_filter": str(agent_id) if agent_id else None,
             "event_count": len(events),
             "chain_valid": verification.valid,

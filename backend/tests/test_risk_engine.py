@@ -46,3 +46,12 @@ def test_block_only_at_very_high_score():
     # 40 (delete) + 25 (customer) + 25 (volume) + 15 (destination) = 105 -> capped 100
     assert r.verdict == "BLOCK"
     assert r.risk_score >= 85
+
+
+def test_synonym_evasion_is_prevented():
+    """Naming delete_customer as remove_user must still infer action=delete and resource=customer."""
+    r = evaluate(tool="remove_user", arguments={"user_id": "4821"})
+    assert r.action == "delete"
+    assert r.resource_type == "customer"
+    assert r.verdict == "HITL"
+    assert 30 <= r.risk_score <= 69

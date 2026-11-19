@@ -4,23 +4,23 @@ This is where per-invocation control happens (arguments, destination, volume).
 It does NOT execute tools; it only prepares a normalized view.
 """
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
 class ToolCall:
     tool: str
     arguments: dict[str, Any]
-    resource_type: Optional[str] = None
-    approval_id: Optional[Any] = None
+    resource_type: str | None = None
+    approval_id: Any | None = None
 
 
 @dataclass
 class NormalizedCall:
     tool: str
     arguments: dict[str, Any]
-    resource_type: Optional[str]
-    approval_id: Optional[Any] = None
+    resource_type: str | None
+    approval_id: Any | None = None
     warnings: list[str] = field(default_factory=list)
 
 

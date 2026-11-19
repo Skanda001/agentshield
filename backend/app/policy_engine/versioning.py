@@ -1,6 +1,7 @@
 """Version management: hashing, persisting a new version, listing history."""
 import hashlib
 import json
+import uuid
 from typing import Any
 
 from sqlalchemy import select
@@ -41,7 +42,7 @@ async def create_policy_version(
 
 
 async def list_versions(
-    db: AsyncSession, policy_id
+    db: AsyncSession, policy_id: uuid.UUID
 ) -> list[PolicyVersion]:
     result = await db.execute(
         select(PolicyVersion)
@@ -52,7 +53,7 @@ async def list_versions(
 
 
 async def get_version(
-    db: AsyncSession, policy_id, version: int
+    db: AsyncSession, policy_id: uuid.UUID, version: int
 ) -> PolicyVersion | None:
     result = await db.execute(
         select(PolicyVersion).where(

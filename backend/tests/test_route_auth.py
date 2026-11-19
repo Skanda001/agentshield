@@ -9,13 +9,9 @@ A failing test means you added an endpoint without auth — it must either
 be added to OPEN_ROUTES below (with a comment explaining why) or wired to
 get_current_agent.
 """
-import pytest
-from fastapi import FastAPI
-from fastapi.routing import APIRoute
-
-from app.main import app
 from app.core.deps import get_current_agent, get_optional_agent
-
+from app.main import app
+from fastapi.routing import APIRoute
 
 # Routes that are intentionally open (no auth required).
 # Format: (method, path)  — exact match.

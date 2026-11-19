@@ -1,7 +1,6 @@
 """Approval model. One row per ESCALATE decision awaiting human sign-off."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -11,7 +10,7 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Approval(Base):
@@ -47,18 +46,18 @@ class Approval(Base):
 
     # What the agent is asking for
     tool: Mapped[str] = mapped_column(String(120), nullable=False)
-    resource_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    resource_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     request_context: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
     # Who decided and why
-    decided_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
-    decision_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Notification delivery
-    notified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    notification_channel: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
-    notification_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notification_channel: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    notification_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timeout
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

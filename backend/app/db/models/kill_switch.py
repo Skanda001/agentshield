@@ -1,7 +1,6 @@
 """KillSwitch model. One row per active or historical suspension."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -11,7 +10,7 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class KillSwitch(Base):
@@ -34,12 +33,12 @@ class KillSwitch(Base):
     #   tool   -> tool name (string)
     #   tenant -> tenants.id (stringified UUID)
     #   global -> null
-    target_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, index=True)
+    target_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
 
     # The tenant that owns this switch (null only for global switches, which are
     # created by admins and are visible to all tenants).
-    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
 
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -51,6 +50,6 @@ class KillSwitch(Base):
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
 
-    deactivated_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
-    deactivated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    deactivation_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    deactivated_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deactivation_note: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -1,6 +1,5 @@
 """Kill switch service: activate, deactivate, list."""
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -10,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import chain as audit_chain
 from app.db.models.agent import Agent
 from app.db.models.kill_switch import KillSwitch
-from app.db.models.tenant import Tenant
 
 
 class KillSwitchError(Exception):
@@ -47,10 +45,10 @@ async def activate(
     db: AsyncSession,
     *,
     scope: str,
-    target_id: Optional[str],
+    target_id: str | None,
     reason: str,
     activated_by: str,
-    tenant_id: Optional[UUID] = None,
+    tenant_id: UUID | None = None,
 ) -> KillSwitch:
     # Idempotence check: if an active switch already exists for this scope+target, reject
     stmt = select(KillSwitch).where(
@@ -58,6 +56,10 @@ async def activate(
         KillSwitch.target_id == target_id,
         KillSwitch.is_active == True,  # noqa: E712
     )
+    if tenant_id is not None:
+        stmt = stmt.where(KillSwitch.tenant_id == tenant_id)
+    else:
+        stmt = stmt.where(KillSwitch.tenant_id.is_(None))
     result = await db.execute(stmt)
     existing = result.scalar_one_or_none()
     if existing:
@@ -97,7 +99,7 @@ async def deactivate(
     *,
     kill_switch_id: UUID,
     deactivated_by: str,
-    note: Optional[str] = None,
+    note: str | None = None,
 ) -> KillSwitch:
     result = await db.execute(select(KillSwitch).where(KillSwitch.id == kill_switch_id))
     ks = result.scalar_one_or_none()
@@ -108,7 +110,7 @@ async def deactivate(
 
     ks.is_active = False
     ks.deactivated_by = deactivated_by
-    ks.deactivated_at = datetime.now(timezone.utc)
+    ks.deactivated_at = datetime.now(UTC)
     ks.deactivation_note = note
 
     await db.commit()
@@ -132,9 +134,9 @@ async def list_switches(
     db: AsyncSession,
     *,
     active_only: bool = False,
-    scope: Optional[str] = None,
+    scope: str | None = None,
     limit: int = 100,
-    tenant_id: Optional[UUID] = None,
+    tenant_id: UUID | None = None,
 ) -> list[KillSwitch]:
     stmt = select(KillSwitch).order_by(KillSwitch.activated_at.desc()).limit(max(1, min(limit, 500)))
     if active_only:
@@ -151,6 +153,6 @@ async def list_switches(
     return list(result.scalars().all())
 
 
-async def get_switch(db: AsyncSession, kill_switch_id: UUID) -> Optional[KillSwitch]:
+async def get_switch(db: AsyncSession, kill_switch_id: UUID) -> KillSwitch | None:
     result = await db.execute(select(KillSwitch).where(KillSwitch.id == kill_switch_id))
     return result.scalar_one_or_none()

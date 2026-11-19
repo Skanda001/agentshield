@@ -8,7 +8,6 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
-
 # NullPool is used with async engines to avoid connection leaks across
 # event loops. Recommended for FastAPI + SQLAlchemy async.
 engine = create_async_engine(

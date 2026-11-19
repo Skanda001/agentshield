@@ -1,8 +1,9 @@
 """Tests that PII (Aadhaar, PAN, etc.) never appears in outbound requests to Groq or Supabase."""
 from unittest.mock import MagicMock, patch
-import pytest
 
-from app.services.supabase_logger import generate_groq_explanation, log_decision_async, send_to_supabase
+from app.services.supabase_logger import (
+    generate_groq_explanation,
+)
 
 
 def test_groq_explanation_masks_aadhaar_and_pan():
@@ -42,11 +43,11 @@ def test_groq_explanation_masks_aadhaar_and_pan():
 
 def test_supabase_payload_never_contains_raw_arguments():
     """Outbound Supabase payload structure must never contain raw tool arguments."""
-    with patch("app.services.supabase_logger.send_to_supabase") as mock_send:
+    with patch("app.services.supabase_logger.send_to_supabase"):
         # Call log_decision_async directly
         with patch("app.core.config.settings.SUPABASE_URL", "https://xyz.supabase.co"), \
              patch("app.core.config.settings.SUPABASE_KEY", "test-key-123"):
-            
+
             # Use generate_groq_explanation fallback directly
             explanation = generate_groq_explanation(
                 tool="transfer_funds",

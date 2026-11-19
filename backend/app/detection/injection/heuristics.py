@@ -15,7 +15,6 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-
 # Each entry: (label, regex, weight). Weights sum into the final score
 # after being capped at 1.0. Chosen so that any single strong match
 # (like "ignore previous instructions") already crosses the threshold.
@@ -72,7 +71,7 @@ def _flatten(value) -> str:
         return value
     if isinstance(value, dict):
         return " ".join(_flatten(v) for v in value.values())
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return " ".join(_flatten(v) for v in value)
     if value is None:
         return ""

@@ -1,10 +1,8 @@
 """Pydantic schemas for agent and tenant endpoints."""
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
-
+from pydantic import BaseModel, Field, field_validator
 
 # ─── Tenant ────────────────────────────────────────────────────
 
@@ -28,7 +26,7 @@ class TenantOut(BaseModel):
 class AgentCreate(BaseModel):
     tenant_id: UUID
     name: str = Field(min_length=2, max_length=120)
-    description: Optional[str] = None
+    description: str | None = None
     role: str = Field(default="support", max_length=60)
     scopes: list[str] = Field(default_factory=list)
 
@@ -45,7 +43,7 @@ class AgentOut(BaseModel):
     id: UUID
     tenant_id: UUID
     name: str
-    description: Optional[str]
+    description: str | None
     role: str
     scopes: list[str]
     status: str

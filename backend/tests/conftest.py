@@ -28,6 +28,7 @@ if sys.platform == "win32":
 
 import pytest
 
+
 @pytest.fixture(autouse=True)
 def enable_demo_mode_fixture(monkeypatch):
     """Ensure DEMO_MODE=True for all test suites."""

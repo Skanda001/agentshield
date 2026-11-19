@@ -1,5 +1,4 @@
 """Kill switch HTTP endpoints."""
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -67,7 +66,7 @@ async def activate(
             tenant_id=agent.tenant_id,
         )
     except svc.KillSwitchError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/kill-switch/{kill_switch_id}/deactivate", response_model=KillSwitchOut)
@@ -100,13 +99,13 @@ async def deactivate(
             note=payload.note,
         )
     except svc.KillSwitchError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/kill-switch", response_model=list[KillSwitchOut])
 async def list_switches(
     active_only: bool = Query(default=False),
-    scope: Optional[str] = Query(default=None, pattern=r"^(agent|tool|tenant|global)$"),
+    scope: str | None = Query(default=None, pattern=r"^(agent|tool|tenant|global)$"),
     limit: int = Query(default=100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     agent: Agent = Depends(get_current_agent),

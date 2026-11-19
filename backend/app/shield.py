@@ -14,14 +14,13 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
-import json
 import logging
 import re
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 log = logging.getLogger("agentshield.shield")
 
@@ -192,7 +191,7 @@ def score_risk(
     # Inspect string args for PII + injection
     flat = " ".join(
         str(v) for v in list(args) + list(kwargs.values())
-        if isinstance(v, (str, int, float))
+        if isinstance(v, str | int | float)
     )
     pii = detect_pii(flat)
     if pii:

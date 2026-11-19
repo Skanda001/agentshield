@@ -7,10 +7,9 @@ Comprehensive, Hard Stress-Test Suite for AgentShield Next-Gen Features
 4. Human-in-the-Loop (HITL) Execution Resume
 5. SDK @protect In-Flight Redaction & Approval Resumption
 """
-import sys
 import os
+import sys
 import uuid
-import json
 
 # Setup backend import path
 BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -21,11 +20,14 @@ if BACKEND_DIR not in sys.path:
 os.environ["DATABASE_URL"] = "postgresql+asyncpg://mock:mock@localhost:5432/mock"
 os.environ["SECRET_KEY"] = "test-secret-key-1234567890"
 
-from app.detection.pii.masker import mask_string, mask_pii_in_data
-from app.risk_engine.signals import extract_signals
-from app.policy_engine.evaluator import EvalContext, evaluate_policy
-from app.schemas.decision import DecideRequest, DecideResponse, DecisionOut
-from app.schemas.policy import PolicyDocument, PolicySimulateRequest, PolicySimulateResponse, RuleSchema
+from app.detection.pii.masker import mask_pii_in_data, mask_string  # noqa: E402
+from app.policy_engine.evaluator import EvalContext, evaluate_policy  # noqa: E402
+from app.risk_engine.signals import extract_signals  # noqa: E402
+from app.schemas.decision import DecideRequest, DecideResponse  # noqa: E402
+from app.schemas.policy import (  # noqa: E402
+    PolicyDocument,
+    RuleSchema,
+)
 
 
 def test_pii_masker_hard_cases():
@@ -78,17 +80,17 @@ def test_pii_masker_hard_cases():
 
     masked_data, collected_labels = mask_pii_in_data(nested_payload)
     print(f"\nNested Redaction Detected Labels: {collected_labels}")
-    
+
     # Assertions on nested keys
     sender_contact = masked_data["sender"]["contact"]
     assert sender_contact["emails"][0] == "v***@gmail.com"
     assert sender_contact["emails"][1] == "v***@enterprise.org"
     assert sender_contact["mobile"] == "+91 **** 3210"
-    
+
     docs = masked_data["sender"]["identity_docs"]
     assert docs[0]["number"] == "ABCDE****F"
     assert docs[1]["number"] == "2345 **** 0123"
-    
+
     # Metadata untouched
     assert masked_data["metadata"]["is_verified"] is True
     assert masked_data["metadata"]["score"] == 98.5
@@ -124,7 +126,7 @@ def test_signals_and_injection_hard_cases():
     print(f"Injection Score: {sig.injection_score:.2f}")
     print(f"PII Classification: {sig.pii_classification}")
     print(f"PII Labels: {sig.pii_labels}")
-    
+
     assert sig.injection_score >= 0.50, f"Expected high injection score, got {sig.injection_score}"
     assert "pan" in sig.pii_labels, "Expected PAN label to be identified"
     assert sig.action == "send"

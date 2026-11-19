@@ -4,7 +4,6 @@ Precedence: global > tenant > agent > tool.
 The first active switch found determines the block reason.
 """
 from dataclasses import dataclass
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -16,17 +15,18 @@ from app.db.models.kill_switch import KillSwitch
 @dataclass
 class KillSwitchCheck:
     blocked: bool
-    reason: Optional[str] = None
-    scope: Optional[str] = None
-    kill_switch_id: Optional[UUID] = None
+    reason: str | None = None
+    scope: str | None = None
+    kill_switch_id: UUID | None = None
 
 
 async def _find_active(
     db: AsyncSession,
     *,
     scope: str,
-    target_id: Optional[str],
-) -> Optional[KillSwitch]:
+    target_id: str | None,
+    tenant_id: UUID | None = None,
+) -> KillSwitch | None:
     stmt = select(KillSwitch).where(
         KillSwitch.scope == scope,
         KillSwitch.is_active == True,  # noqa: E712
@@ -35,6 +35,10 @@ async def _find_active(
         stmt = stmt.where(KillSwitch.target_id.is_(None))
     else:
         stmt = stmt.where(KillSwitch.target_id == target_id)
+
+    if tenant_id is not None:
+        from sqlalchemy import or_
+        stmt = stmt.where(or_(KillSwitch.tenant_id == tenant_id, KillSwitch.tenant_id.is_(None)))
 
     stmt = stmt.order_by(KillSwitch.activated_at.desc()).limit(1)
     result = await db.execute(stmt)
@@ -81,7 +85,7 @@ async def check(
         )
 
     # 4. Tool
-    ks = await _find_active(db, scope="tool", target_id=tool)
+    ks = await _find_active(db, scope="tool", target_id=tool, tenant_id=tenant_id)
     if ks:
         return KillSwitchCheck(
             blocked=True,

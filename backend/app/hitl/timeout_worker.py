@@ -35,5 +35,5 @@ async def periodic_expirer(
                 await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
                 return
             await asyncio.sleep(interval_seconds)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass

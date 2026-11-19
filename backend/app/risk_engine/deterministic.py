@@ -12,12 +12,11 @@ Deterministic-first is intentional: security decisions must be explainable
 and predictable. The ML layer (v2) will augment this, not replace it.
 """
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-from app.core.constants import ALLOW_MAX, HITL_MAX, VERDICT_ALLOW, VERDICT_HITL, VERDICT_BLOCK
+from app.core.constants import ALLOW_MAX, HITL_MAX, VERDICT_ALLOW, VERDICT_BLOCK, VERDICT_HITL
 from app.risk_engine.signals import extract_signals
 from app.schemas.decision import Signal
-
 
 MAX_SCORE = 100.0
 
@@ -44,7 +43,7 @@ def evaluate(
     *,
     tool: str,
     arguments: dict[str, Any],
-    resource_type: Optional[str] = None,
+    resource_type: str | None = None,
 ) -> RiskResult:
     sig = extract_signals(
         tool=tool,

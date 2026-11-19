@@ -11,7 +11,6 @@ Detects:
 - Cross-tenant isolation (tenant_id filter)
 """
 from dataclasses import dataclass, field
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -35,7 +34,7 @@ class VerificationResult:
 async def verify_chain(
     db: AsyncSession,
     *,
-    tenant_id: Optional[UUID] = None,
+    tenant_id: UUID | None = None,
     from_seq: int | None = None,
     to_seq: int | None = None,
 ) -> VerificationResult:

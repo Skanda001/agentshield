@@ -2,13 +2,12 @@
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
-
 from app.db.models.agent import Agent
 from app.db.models.tenant import Tenant
 from app.db.session import AsyncSessionLocal
 from app.main import app
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete
 
 
 @pytest.mark.asyncio

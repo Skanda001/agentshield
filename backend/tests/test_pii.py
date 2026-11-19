@@ -1,8 +1,6 @@
 """Unit tests for PII detection."""
-from app.detection.pii.indian_pii import find_all as find_indian
 
 from app.detection.pii.presidio_wrapper import detect
-
 
 
 def test_email_detected():

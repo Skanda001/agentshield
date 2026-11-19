@@ -3,8 +3,10 @@
 Chunk 10: check kill switches BEFORE policy evaluation.
 If any switch is active, BLOCK immediately with the switch reason.
 """
+import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from datetime import UTC
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,9 +44,11 @@ async def run(
 
     # ── 0a. Check HITL Approval (Execution Resume) ───────────
     if normalized.approval_id:
-        from datetime import datetime, timezone
+        from datetime import datetime
         from uuid import UUID as _UUID
+
         from sqlalchemy import select
+
         from app.core.crypto import canonical_json, sha256_hex
         from app.db.models.approval import Approval
 
@@ -72,7 +76,7 @@ async def run(
                 rejection_reason = "Approval has already been used (single-use constraint)"
             elif approved_obj.status != "approved":
                 rejection_reason = f"Approval is not approved (status: {approved_obj.status})"
-            elif approved_obj.expires_at <= datetime.now(timezone.utc):
+            elif approved_obj.expires_at <= datetime.now(UTC):
                 approved_obj.status = "expired"
                 rejection_reason = "Approval has expired"
             else:
@@ -85,6 +89,8 @@ async def run(
 
         if rejection_reason:
             decision = Decision(
+                id=uuid.uuid4(),
+                created_at=datetime.now(UTC),
                 agent_id=agent.id,
                 tenant_id=agent.tenant_id,
                 tool=normalized.tool,
@@ -123,8 +129,11 @@ async def run(
             return PipelineResult(decision=decision, response=_to_response(decision))
 
         # Successfully authorized — consume the approval atomically (single-use)
+        assert approved_obj is not None
         approved_obj.status = "used"
         decision = Decision(
+            id=uuid.uuid4(),
+            created_at=datetime.now(UTC),
             agent_id=agent.id,
             tenant_id=agent.tenant_id,
             tool=normalized.tool,
@@ -413,7 +422,7 @@ def _to_response(
     decision: Decision,
     approval_id: Any = None,
     masked: bool = False,
-    masked_arguments: Optional[dict[str, Any]] = None,
+    masked_arguments: dict[str, Any] | None = None,
 ) -> DecideResponse:
     return DecideResponse(
         decision_id=decision.id,

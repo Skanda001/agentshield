@@ -1,7 +1,6 @@
 """AuditLog — append-only, hash-chained, HMAC-signed."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Sequence, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -11,7 +10,7 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # Sequence for total ordering of audit events
@@ -40,11 +39,11 @@ class AuditLog(Base):
     # examples: decision.made, policy.created, agent.registered, approval.requested
 
     # Who
-    agent_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"),
         nullable=True, index=True,
     )
-    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"),
         nullable=True, index=True,
     )
@@ -58,7 +57,7 @@ class AuditLog(Base):
     signature: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # Optional reason / free text
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False, index=True

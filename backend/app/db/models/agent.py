@@ -1,7 +1,7 @@
 """Agent model. Represents a registered AI agent that can call tools."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -16,9 +16,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
+if TYPE_CHECKING:
+    from app.db.models.tenant import Tenant
+
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Agent(Base):
@@ -38,7 +41,7 @@ class Agent(Base):
     )
 
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Hashed API key — never store the plaintext
     api_key_hash: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)

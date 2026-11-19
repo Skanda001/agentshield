@@ -1,7 +1,6 @@
 """Order model — synthetic customer orders."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
@@ -11,7 +10,7 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Order(Base):
@@ -38,7 +37,7 @@ class Order(Base):
     status: Mapped[str] = mapped_column(
         String(30), default="processing", nullable=False
     )
-    notes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False

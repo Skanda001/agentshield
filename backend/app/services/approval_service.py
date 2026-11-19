@@ -1,6 +1,5 @@
 """Approval service: create, list, decide, expire."""
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -10,7 +9,6 @@ from app.audit import chain as audit_chain
 from app.db.models.agent import Agent
 from app.db.models.approval import Approval
 from app.db.models.decision import Decision
-
 
 DEFAULT_TIMEOUT_MINUTES = 30
 
@@ -33,7 +31,7 @@ async def create_for_decision(
     if existing.scalar_one_or_none():
         raise ApprovalServiceError("Approval already exists for this decision")
 
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
+    expires_at = datetime.now(UTC) + timedelta(minutes=timeout_minutes)
 
     approval = Approval(
         decision_id=decision.id,
@@ -55,7 +53,7 @@ async def create_for_decision(
     return approval
 
 
-async def get_approval(db: AsyncSession, approval_id: UUID) -> Optional[Approval]:
+async def get_approval(db: AsyncSession, approval_id: UUID) -> Approval | None:
     result = await db.execute(select(Approval).where(Approval.id == approval_id))
     return result.scalar_one_or_none()
 
@@ -63,8 +61,8 @@ async def get_approval(db: AsyncSession, approval_id: UUID) -> Optional[Approval
 async def list_approvals(
     db: AsyncSession,
     *,
-    tenant_id: Optional[UUID] = None,
-    status: Optional[str] = None,
+    tenant_id: UUID | None = None,
+    status: str | None = None,
     limit: int = 50,
 ) -> list[Approval]:
     stmt = select(Approval).order_by(Approval.created_at.desc()).limit(max(1, min(limit, 500)))
@@ -82,7 +80,7 @@ async def decide(
     approval: Approval,
     approved: bool,
     decided_by: str,
-    note: Optional[str] = None,
+    note: str | None = None,
 ) -> Approval:
     """Record a human's decision and append to the audit chain."""
     if approval.status != "pending":
@@ -91,7 +89,7 @@ async def decide(
     approval.status = "approved" if approved else "denied"
     approval.decided_by = decided_by
     approval.decision_note = note
-    approval.decided_at = datetime.now(timezone.utc)
+    approval.decided_at = datetime.now(UTC)
 
     await db.commit()
     await db.refresh(approval)
@@ -116,7 +114,7 @@ async def decide(
 
 async def expire_stale(db: AsyncSession) -> int:
     """Mark pending approvals past expires_at as expired. Returns count."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stmt = select(Approval).where(
         Approval.status == "pending", Approval.expires_at <= now
     )

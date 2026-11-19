@@ -2,14 +2,13 @@
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import jwt
 from jwt.exceptions import InvalidTokenError
 
 from app.core.config import settings
-
 
 # ─── API key generation & hashing ─────────────────────────────
 
@@ -44,14 +43,14 @@ def create_agent_token(
     agent_id: str,
     tenant_id: str,
     scopes: list[str],
-    expires_minutes: Optional[int] = None,
+    expires_minutes: int | None = None,
 ) -> str:
     """Create a short-lived access token for an authenticated agent."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(
         minutes=expires_minutes or settings.AGENTSHIELD_ACCESS_TOKEN_MINUTES
     )
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "sub": agent_id,
         "tenant_id": tenant_id,
         "scopes": scopes,
@@ -66,7 +65,7 @@ def create_agent_token(
     )
 
 
-def decode_agent_token(token: str) -> Optional[Dict[str, Any]]:
+def decode_agent_token(token: str) -> dict[str, Any] | None:
     """Verify and decode an agent access token. Returns None on any failure."""
     try:
         payload = jwt.decode(
@@ -79,4 +78,4 @@ def decode_agent_token(token: str) -> Optional[Dict[str, Any]]:
 
     if payload.get("type") != "agent_access":
         return None
-    return payload
+    return cast(dict[str, Any], payload)

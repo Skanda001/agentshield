@@ -1,5 +1,5 @@
 """Shared FastAPI dependencies."""
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import decode_agent_token
 from app.db.models.agent import Agent
 from app.db.session import AsyncSessionLocal
-
 
 # Declares a security scheme so Swagger UI shows the "Authorize" button.
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -24,7 +23,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_current_agent(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> Agent:
     """Resolve the calling agent from the Authorization: Bearer <JWT> header."""
@@ -59,9 +58,9 @@ async def get_current_agent(
 
 
 async def get_optional_agent(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
-) -> Optional[Agent]:
+) -> Agent | None:
     """Resolve calling agent when a valid Bearer token is provided."""
     if not credentials or credentials.scheme.lower() != "bearer":
         return None

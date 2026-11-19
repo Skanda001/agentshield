@@ -18,20 +18,18 @@ decision row and its audit event are committed atomically in one
 transaction.  If the caller rolls back, the audit event is also rolled
 back — no phantom decisions with no audit trail.
 """
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import (
-    canonical_json,
     compute_event_hash,
     sign_hash,
 )
 from app.db.models.audit_log import AuditLog
-
 
 GENESIS_HASH = "0" * 64
 ADVISORY_LOCK_KEY = 84_041_018   # arbitrary but fixed
@@ -49,9 +47,9 @@ async def append_event(
     *,
     event_type: str,
     payload: dict[str, Any],
-    agent_id: Optional[UUID] = None,
-    tenant_id: Optional[UUID] = None,
-    note: Optional[str] = None,
+    agent_id: UUID | None = None,
+    tenant_id: UUID | None = None,
+    note: str | None = None,
 ) -> AuditLog:
     """Append one event to the chain. Flushes but does NOT commit.
 
@@ -66,7 +64,7 @@ async def append_event(
     prev_hash = tail.hash if tail else GENESIS_HASH
 
     # Canonical, timestamped payload
-    ts = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(UTC).isoformat()
     full_payload = {
         "event_type": event_type,
         "payload": payload,
@@ -100,8 +98,8 @@ async def list_events(
     db: AsyncSession,
     *,
     limit: int = 100,
-    agent_id: Optional[UUID] = None,
-    tenant_id: Optional[UUID] = None,
+    agent_id: UUID | None = None,
+    tenant_id: UUID | None = None,
 ) -> list[AuditLog]:
     stmt = select(AuditLog).order_by(AuditLog.seq.desc()).limit(max(1, min(limit, 1000)))
     if tenant_id:

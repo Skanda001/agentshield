@@ -7,10 +7,8 @@ The real code path (httpx POST to the webhook) is identical to production;
 only the target URL differs.
 """
 import logging
-from typing import Optional
 
 import httpx
-
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -25,7 +23,7 @@ async def send_approval_request(
     reasons: list[str],
     approve_url: str,
     deny_url: str,
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """Post an interactive notification. Returns (success, error_message)."""
     webhook_url = getattr(settings, "SLACK_WEBHOOK_URL", None)
 

@@ -1,5 +1,4 @@
 """Policy service: create policy, add versions, list, evaluate preview."""
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -21,7 +20,7 @@ async def create_policy(
     *,
     tenant_id: UUID,
     name: str,
-    description: Optional[str],
+    description: str | None,
     document: PolicyDocument,
 ) -> Policy:
     dup = await db.execute(
@@ -46,7 +45,7 @@ async def create_policy(
     return policy
 
 
-async def get_policy(db: AsyncSession, policy_id: UUID) -> Optional[Policy]:
+async def get_policy(db: AsyncSession, policy_id: UUID) -> Policy | None:
     result = await db.execute(select(Policy).where(Policy.id == policy_id))
     return result.scalar_one_or_none()
 
@@ -81,9 +80,10 @@ DEFAULT_POLICY_DICT = {
 async def ensure_default_policy(db: AsyncSession, tenant_id: UUID) -> Policy:
     """Ensure an active enterprise security policy exists for this tenant, creating or upgrading as needed."""
     from pathlib import Path
+
     from app.policy_engine.dsl import load_and_validate
 
-    document: Optional[PolicyDocument] = None
+    document: PolicyDocument | None = None
     candidates = [
         Path("/app/policies/demo.yaml"),
         Path(__file__).resolve().parent.parent.parent / "policies" / "demo.yaml",
@@ -95,7 +95,7 @@ async def ensure_default_policy(db: AsyncSession, tenant_id: UUID) -> Policy:
             if c.exists():
                 document = load_and_validate(c)
                 break
-        except Exception:
+        except Exception:  # noqa: S112
             continue
 
     if not document:
@@ -141,7 +141,7 @@ async def ensure_default_policy(db: AsyncSession, tenant_id: UUID) -> Policy:
 
 async def find_active_policy_for_tenant(
     db: AsyncSession, tenant_id: UUID
-) -> Optional[Policy]:
+) -> Policy | None:
     """Return the active policy for a tenant, automatically ensuring default security rules if missing."""
     result = await db.execute(
         select(Policy)
@@ -157,7 +157,7 @@ async def find_active_policy_for_tenant(
         if "escalate_fund_transfer" not in rule_names:
             try:
                 return await ensure_default_policy(db, tenant_id)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         return pol
 
@@ -170,7 +170,7 @@ async def find_active_policy_for_tenant(
 
 async def get_current_document(
     db: AsyncSession, policy: Policy
-) -> Optional[PolicyDocument]:
+) -> PolicyDocument | None:
     result = await db.execute(
         select(PolicyVersion)
         .where(PolicyVersion.policy_id == policy.id)
@@ -191,7 +191,7 @@ async def evaluate_for_agent(
     action: str,
     resource_type: str,
     arguments: dict,
-    data_classification: Optional[str] = None,
+    data_classification: str | None = None,
 ) -> EvalResult:
     document = await get_current_document(db, policy)
     if not document:
@@ -222,7 +222,7 @@ async def preview_evaluation(
     action: str,
     resource_type: str,
     arguments: dict,
-    data_classification: Optional[str] = None,
+    data_classification: str | None = None,
 ) -> PolicyEvaluationPreview:
     r = await evaluate_for_agent(
         db,

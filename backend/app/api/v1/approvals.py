@@ -1,5 +1,4 @@
 """Approval HTTP endpoints."""
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -27,7 +26,7 @@ def _require_approver(agent) -> None:
 
 @router.get("/approvals", response_model=list[ApprovalOut])
 async def list_approvals(
-    status: Optional[str] = Query(default=None, pattern=r"^(pending|approved|denied|expired|used)$"),
+    status: str | None = Query(default=None, pattern=r"^(pending|approved|denied|expired|used)$"),
     limit: int = Query(default=50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     agent=Depends(get_current_agent),
@@ -84,4 +83,4 @@ async def decide(
             note=payload.note,
         )
     except svc.ApprovalServiceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e

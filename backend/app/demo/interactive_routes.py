@@ -11,7 +11,7 @@ import inspect
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -166,7 +166,7 @@ async def run_agent_prompt(
         )
     except Exception as e:
         logger.exception("Customer support agent run failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Agent execution error: {e}")
+        raise HTTPException(status_code=500, detail=f"Agent execution error: {e}") from e
 
     await bus.close(run_id)
 
@@ -319,7 +319,7 @@ def format_approved_output(
                 output,
             )
         lines = [
-            f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n",
+            "✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n",
             f"### Authorized Confidential Correspondence (Customer #{cid})\n",
         ]
         for idx, em in enumerate(emails[:5], 1):
@@ -330,7 +330,7 @@ def format_approved_output(
         payments = output.get("payments", [])
         cid = args.get("customer_id", "Unknown")
         lines = [
-            f"✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n",
+            "✅ **Human-in-the-Loop Authorization Approved** by supervisor.\n",
             f"### Authorized Financial Records (Customer #{cid})\n",
         ]
         for p in payments:
@@ -394,7 +394,7 @@ async def decide_approval_endpoint(
     try:
         app_uuid = UUID(payload.approval_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid approval UUID format")
+        raise HTTPException(status_code=400, detail="Invalid approval UUID format") from None
 
     result = await db.execute(select(Approval).where(Approval.id == app_uuid))
     approval = result.scalar_one_or_none()
@@ -465,8 +465,8 @@ async def decide_approval_endpoint(
             normalized_tool, call_args, tool_output or {}, prompt=user_prompt, approval_context=req_ctx
         )
 
-        updated_event = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+        updated_event: dict[str, Any] = {
+            "ts": datetime.now(UTC).isoformat(),
             "run_id": run_id,
             "agent_id": str(approval.agent_id),
             "agent_version": "1.0.0",
@@ -501,7 +501,7 @@ async def decide_approval_endpoint(
         agent_response = format_denied_output(tool_name, args, payload.note)
 
         updated_event = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "run_id": run_id,
             "agent_id": str(approval.agent_id),
             "agent_version": "1.0.0",
@@ -561,7 +561,7 @@ async def demo_ws(
         while True:
             try:
                 event = await asyncio.wait_for(q.get(), timeout=30.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await websocket.send_text(json.dumps({"__ping__": True}))
                 continue
 
@@ -579,7 +579,7 @@ async def demo_ws(
         await bus.unsubscribe(run_id, q)
         try:
             await websocket.close()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
 
@@ -588,7 +588,7 @@ async def demo_ws(
 # ─────────────────────────────────────────────────────────────
 
 @router.get("/demo/scenarios")
-async def list_scenarios(_agent: Optional[Agent] = Depends(get_optional_agent)):
+async def list_scenarios(_agent: Agent | None = Depends(get_optional_agent)):
     """Legacy canned scenarios endpoint returning empty list."""
     return []
 

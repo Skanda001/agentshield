@@ -1,6 +1,5 @@
 """Pydantic schemas for kill switches."""
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -8,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class KillSwitchActivate(BaseModel):
     scope: str = Field(pattern=r"^(agent|tool|tenant|global)$")
-    target_id: Optional[str] = Field(default=None, max_length=120)
+    target_id: str | None = Field(default=None, max_length=120)
     reason: str = Field(min_length=3, max_length=1000)
     # activated_by is derived from the authenticated principal — not accepted from client
 
@@ -25,26 +24,26 @@ class KillSwitchActivate(BaseModel):
 
 class KillSwitchDeactivate(BaseModel):
     # deactivated_by is derived from the authenticated principal — not accepted from client
-    note: Optional[str] = Field(default=None, max_length=1000)
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class KillSwitchOut(BaseModel):
     id: UUID
     scope: str
-    target_id: Optional[str]
+    target_id: str | None
     reason: str
     is_active: bool
     activated_by: str
     activated_at: datetime
-    deactivated_by: Optional[str]
-    deactivated_at: Optional[datetime]
-    deactivation_note: Optional[str]
+    deactivated_by: str | None
+    deactivated_at: datetime | None
+    deactivation_note: str | None
 
     model_config = {"from_attributes": True}
 
 
 class KillSwitchCheck(BaseModel):
     blocked: bool
-    reason: Optional[str] = None
-    scope: Optional[str] = None
-    kill_switch_id: Optional[UUID] = None
+    reason: str | None = None
+    scope: str | None = None
+    kill_switch_id: UUID | None = None

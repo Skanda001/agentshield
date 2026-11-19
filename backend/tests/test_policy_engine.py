@@ -2,7 +2,6 @@
 from app.policy_engine.evaluator import EvalContext, evaluate_policy
 from app.schemas.policy import PolicyDocument
 
-
 POLICY = PolicyDocument.model_validate({
     "name": "test_policy",
     "version": 1,

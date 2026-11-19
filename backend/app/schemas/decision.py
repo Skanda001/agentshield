@@ -1,6 +1,6 @@
 """Pydantic schemas for the /decide endpoint."""
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 class DecideRequest(BaseModel):
     tool: str = Field(min_length=1, max_length=120)
     arguments: dict[str, Any] = Field(default_factory=dict)
-    resource_type: Optional[str] = Field(default=None, max_length=80)
-    data_classification: Optional[str] = Field(default=None, max_length=40)
-    approval_id: Optional[UUID] = None  # Resuming an approved HITL escalation
+    resource_type: str | None = Field(default=None, max_length=80)
+    data_classification: str | None = Field(default=None, max_length=40)
+    approval_id: UUID | None = None  # Resuming an approved HITL escalation
 
 
 class Signal(BaseModel):
@@ -30,19 +30,19 @@ class DecideResponse(BaseModel):
     reasons: list[str]
     signals: list[Signal]
 
-    policy_id: Optional[UUID] = None
-    policy_rule: Optional[str] = None
-    policy_effect: Optional[str] = None
+    policy_id: UUID | None = None
+    policy_rule: str | None = None
+    policy_effect: str | None = None
 
     injection_score: float = 0.0
 
     # PII / DLP
-    pii_classification: Optional[str] = None
+    pii_classification: str | None = None
     pii_labels: list[str] = Field(default_factory=list)
     masked: bool = False
-    masked_arguments: Optional[dict[str, Any]] = None
+    masked_arguments: dict[str, Any] | None = None
 
-    approval_id: Optional[UUID] = None
+    approval_id: UUID | None = None
 
     created_at: datetime
 
@@ -57,9 +57,9 @@ class DecisionOut(BaseModel):
     verdict: str
     risk_score: float
     reasons: list[str]
-    policy_rule: Optional[str] = None
+    policy_rule: str | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
-    note: Optional[str] = None
+    note: str | None = None
     injection_score: float = 0.0
     pii_labels: list[str] = Field(default_factory=list)
     masked: bool = False

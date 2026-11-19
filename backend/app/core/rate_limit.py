@@ -16,22 +16,22 @@ Usage (FastAPI dependency)::
     ):
         ...
 """
-import time
 import logging
-from typing import Optional
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import redis.asyncio as aioredis
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 # Module-level pool — created once at first use
-_pool: Optional[aioredis.Redis] = None
+_pool: aioredis.Redis | None = None
 
 
-async def _get_redis() -> Optional[aioredis.Redis]:
+async def _get_redis() -> aioredis.Redis | None:
     """Return the shared Redis connection; return None on connection failure."""
     global _pool
     if _pool is None:
@@ -49,7 +49,9 @@ async def _get_redis() -> Optional[aioredis.Redis]:
     return _pool
 
 
-def rate_limit(key_prefix: str, max_calls: int, window_seconds: int):
+def rate_limit(
+    key_prefix: str, max_calls: int, window_seconds: int
+) -> Callable[[Request], Coroutine[Any, Any, None]]:
     """Return a FastAPI dependency that enforces a sliding-window rate limit.
 
     Key  : ``rl:{key_prefix}:{client_ip}``

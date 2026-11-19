@@ -5,9 +5,15 @@ Canonical thresholds (imported from app.core.constants):
   30–69  → HITL  (Human-in-the-Loop)
   70–100 → BLOCK
 """
-import pytest
 
-from app.core.constants import ALLOW_MAX, HITL_MAX, BLOCK_MIN, VERDICT_ALLOW, VERDICT_HITL, VERDICT_BLOCK
+from app.core.constants import (
+    ALLOW_MAX,
+    BLOCK_MIN,
+    HITL_MAX,
+    VERDICT_ALLOW,
+    VERDICT_BLOCK,
+    VERDICT_HITL,
+)
 from app.risk_engine.deterministic import evaluate
 
 

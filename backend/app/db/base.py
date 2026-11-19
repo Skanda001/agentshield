@@ -2,7 +2,6 @@
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 
-
 # Naming convention so Alembic generates stable, predictable names
 # for indexes, foreign keys, and constraints.
 convention = {

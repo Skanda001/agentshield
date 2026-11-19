@@ -6,15 +6,14 @@ Creates an isolated tenant + agent, exercises /decide, then cleans up.
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select
-
 from app.db.models.agent import Agent
 from app.db.models.decision import Decision
 from app.db.models.policy import Policy, PolicyVersion
 from app.db.models.tenant import Tenant
 from app.db.session import AsyncSessionLocal
 from app.main import app
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, select
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,6 @@ and validates structure where possible.
 import re
 from dataclasses import dataclass
 
-
 # ─── Recognizers ──────────────────────────────────────────────
 
 # Aadhaar: 12 digits, usually grouped as 4-4-4. First digit is 2-9.

@@ -56,7 +56,7 @@ async def create_tenant(
             db, name=payload.name, slug=payload.slug
         )
     except registry.RegistryError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return tenant
 
 
@@ -82,7 +82,7 @@ async def create_agent(
             scopes=payload.scopes,
         )
     except registry.RegistryError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     return AgentCreateResponse(
         agent=AgentOut.model_validate(agent),
@@ -145,4 +145,4 @@ async def suspend(
     try:
         return await registry.suspend_agent(db, agent_id=agent_id)
     except registry.RegistryError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e

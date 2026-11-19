@@ -12,9 +12,8 @@ import logging
 import os
 import urllib.error
 import urllib.request
-import uuid
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -42,10 +41,10 @@ CREATE INDEX IF NOT EXISTS idx_call_logs_created_at ON agentshield_call_logs(cre
 
 ALTER TABLE agentshield_call_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Service role insert only" 
+CREATE POLICY "Service role insert only"
 ON agentshield_call_logs FOR INSERT TO service_role WITH CHECK (true);
 
-CREATE POLICY "Service role select only" 
+CREATE POLICY "Service role select only"
 ON agentshield_call_logs FOR SELECT TO service_role USING (true);
 """
 
@@ -64,7 +63,7 @@ def generate_groq_explanation(
     verdict: str,
     reasons: list[str],
     risk_score: float,
-    arguments: Optional[dict[str, Any]] = None,
+    arguments: dict[str, Any] | None = None,
 ) -> str:
     """Generate a concise 1-2 sentence explanation of why this call was ALLOWED, BLOCKED, or ESCALATED using Groq.
 
@@ -94,7 +93,8 @@ def generate_groq_explanation(
                 max_tokens=100,
                 temperature=0.3,
             )
-            ans = res.choices[0].message.content.strip()
+            content = res.choices[0].message.content
+            ans = content.strip() if content else ""
             if ans:
                 return ans
         except Exception as e:
@@ -113,9 +113,9 @@ def generate_groq_explanation(
 
 async def send_to_supabase(
     record: dict[str, Any] | list[dict[str, Any]],
-    url: Optional[str] = None,
-    key: Optional[str] = None,
-    table: Optional[str] = None,
+    url: str | None = None,
+    key: str | None = None,
+    table: str | None = None,
 ) -> bool:
     """Send a record or list of records to Supabase via PostgREST."""
     target_url = (url or settings.SUPABASE_URL).rstrip("/")
@@ -127,7 +127,7 @@ async def send_to_supabase(
 
     endpoint = f"{target_url}/rest/v1/{target_table}"
     payload = json.dumps(record, default=str).encode("utf-8")
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310
         endpoint,
         data=payload,
         headers=_get_supabase_headers(target_key),
@@ -136,7 +136,7 @@ async def send_to_supabase(
 
     def _sync_post():
         try:
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=8) as resp:  # noqa: S310
                 return resp.status in (200, 201, 204)
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8")
@@ -157,13 +157,13 @@ def log_decision_async(
     reasons: list[str],
     risk_score: float,
     arguments: dict[str, Any],
-    agent_id: Optional[UUID | str] = None,
-    agent_name: Optional[str] = None,
-    policy_rule: Optional[str] = None,
-    policy_effect: Optional[str] = None,
-    data_classification: Optional[str] = None,
-    pii_labels: Optional[list[str]] = None,
-    created_at: Optional[datetime] = None,
+    agent_id: UUID | str | None = None,
+    agent_name: str | None = None,
+    policy_rule: str | None = None,
+    policy_effect: str | None = None,
+    data_classification: str | None = None,
+    pii_labels: list[str] | None = None,
+    created_at: datetime | None = None,
 ) -> None:
     """Fire-and-forget logging to Supabase with Groq explanation."""
     if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
@@ -182,7 +182,7 @@ def log_decision_async(
 
         record = {
             "id": str(decision_id),
-            "created_at": (created_at or datetime.now(timezone.utc)).isoformat(),
+            "created_at": (created_at or datetime.now(UTC)).isoformat(),
             "tool": tool,
             "verdict": verdict,
             "groq_explanation": groq_exp,
@@ -198,13 +198,17 @@ def log_decision_async(
 
 async def sync_all_decisions(
     db: AsyncSession,
-    url: Optional[str] = None,
-    key: Optional[str] = None,
-    table: Optional[str] = None,
+    url: str | None = None,
+    key: str | None = None,
+    table: str | None = None,
     limit: int = 25,
+    tenant_id: UUID | None = None,
 ) -> dict[str, Any]:
     """Sync recent decisions from local database into Supabase with Groq explanations."""
-    stmt = select(Decision).order_by(Decision.created_at.desc()).limit(limit)
+    stmt = select(Decision).order_by(Decision.created_at.desc())
+    if tenant_id:
+        stmt = stmt.where(Decision.tenant_id == tenant_id)
+    stmt = stmt.limit(limit)
     result = await db.execute(stmt)
     decisions = list(result.scalars().all())
 
@@ -250,7 +254,7 @@ async def test_supabase_connection(url: str, key: str, table: str = "agentshield
     """Test connection to Supabase table."""
     clean_url = url.rstrip("/")
     endpoint = f"{clean_url}/rest/v1/{table}?limit=1"
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310
         endpoint,
         headers=_get_supabase_headers(key),
         method="GET",
@@ -258,7 +262,7 @@ async def test_supabase_connection(url: str, key: str, table: str = "agentshield
 
     def _probe():
         try:
-            with urllib.request.urlopen(req, timeout=6) as resp:
+            with urllib.request.urlopen(req, timeout=6) as resp:  # noqa: S310
                 data = json.loads(resp.read().decode("utf-8"))
                 return {"connected": True, "status": resp.status, "rows_found": len(data)}
         except urllib.error.HTTPError as e:

@@ -10,18 +10,17 @@ Covers:
      - Expired approval rejected (BLOCK).
 """
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
-
-from app.api.v1.approvals import decide, _require_approver
+from app.api.v1.approvals import _require_approver, decide
 from app.db.models.agent import Agent
 from app.db.models.approval import Approval
 from app.gateway.decision_pipeline import run as run_pipeline
 from app.gateway.tool_adapter import ToolCall
 from app.schemas.approval import ApprovalDecision
+from fastapi import HTTPException
 
 
 def test_require_approver_scope_enforcement():
@@ -73,7 +72,7 @@ async def test_self_approval_rejected():
         tenant_id=tenant_id,
         status="pending",
         tool="delete_customer",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        expires_at=datetime.now(UTC) + timedelta(minutes=30),
     )
 
     db = AsyncMock()
@@ -106,7 +105,7 @@ async def test_cross_tenant_approval_rejected():
         tenant_id=other_tenant_id,  # Different tenant
         status="pending",
         tool="delete_customer",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        expires_at=datetime.now(UTC) + timedelta(minutes=30),
     )
 
     db = AsyncMock()
@@ -119,3 +118,121 @@ async def test_cross_tenant_approval_rejected():
                 agent=agent,
             )
         assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_tampered_approval_arguments_rejected():
+    """If tool arguments do not match what was approved, the pipeline BLOCKS the execution."""
+    agent_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    agent = Agent(id=agent_id, tenant_id=tenant_id, name="bot", scopes=["tool"])
+    appr_id = uuid.uuid4()
+
+    approval = Approval(
+        id=appr_id,
+        decision_id=uuid.uuid4(),
+        agent_id=agent_id,
+        tenant_id=tenant_id,
+        status="approved",
+        tool="delete_customer",
+        request_context={"arguments": {"customer_id": "123"}},
+        expires_at=datetime.now(UTC) + timedelta(minutes=30),
+    )
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = approval
+    mock_db.execute.return_value = mock_result
+
+    with patch("app.audit.chain.append_event", new_callable=AsyncMock):
+        # Caller tries to use approval for customer 999 instead of approved 123!
+        res = await run_pipeline(
+            mock_db,
+            agent=agent,
+            call=ToolCall(
+                tool="delete_customer",
+                arguments={"customer_id": "999"},
+                approval_id=str(appr_id),
+            ),
+        )
+
+    assert res.decision.verdict == "BLOCK"
+    assert "mismatch" in res.decision.reasons[0].lower()
+
+
+@pytest.mark.asyncio
+async def test_single_use_approval_enforced():
+    """An approval with status='used' cannot be consumed again."""
+    agent_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    agent = Agent(id=agent_id, tenant_id=tenant_id, name="bot", scopes=["tool"])
+    appr_id = uuid.uuid4()
+
+    approval = Approval(
+        id=appr_id,
+        decision_id=uuid.uuid4(),
+        agent_id=agent_id,
+        tenant_id=tenant_id,
+        status="used",  # Already consumed!
+        tool="delete_customer",
+        request_context={"arguments": {"customer_id": "123"}},
+        expires_at=datetime.now(UTC) + timedelta(minutes=30),
+    )
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = approval
+    mock_db.execute.return_value = mock_result
+
+    with patch("app.audit.chain.append_event", new_callable=AsyncMock):
+        res = await run_pipeline(
+            mock_db,
+            agent=agent,
+            call=ToolCall(
+                tool="delete_customer",
+                arguments={"customer_id": "123"},
+                approval_id=str(appr_id),
+            ),
+        )
+
+    assert res.decision.verdict == "BLOCK"
+    assert "single-use" in res.decision.reasons[0].lower()
+
+
+@pytest.mark.asyncio
+async def test_expired_approval_rejected():
+    """An expired approval cannot be consumed."""
+    agent_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    agent = Agent(id=agent_id, tenant_id=tenant_id, name="bot", scopes=["tool"])
+    appr_id = uuid.uuid4()
+
+    approval = Approval(
+        id=appr_id,
+        decision_id=uuid.uuid4(),
+        agent_id=agent_id,
+        tenant_id=tenant_id,
+        status="approved",
+        tool="delete_customer",
+        request_context={"arguments": {"customer_id": "123"}},
+        expires_at=datetime.now(UTC) - timedelta(minutes=5),  # Expired!
+    )
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = approval
+    mock_db.execute.return_value = mock_result
+
+    with patch("app.audit.chain.append_event", new_callable=AsyncMock):
+        res = await run_pipeline(
+            mock_db,
+            agent=agent,
+            call=ToolCall(
+                tool="delete_customer",
+                arguments={"customer_id": "123"},
+                approval_id=str(appr_id),
+            ),
+        )
+
+    assert res.decision.verdict == "BLOCK"
+    assert "expired" in res.decision.reasons[0].lower()

@@ -1,7 +1,6 @@
 """Customer model — synthetic customer records for the demo agent."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import Boolean, DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -11,7 +10,7 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Customer(Base):
@@ -32,9 +31,9 @@ class Customer(Base):
     phone: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Synthetic PII — used to test PII detection
-    aadhaar: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    pan: Mapped[Optional[str]] = mapped_column(String(15), nullable=True)
-    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    aadhaar: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    pan: Mapped[str | None] = mapped_column(String(15), nullable=True)
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Account state
     account_status: Mapped[str] = mapped_column(

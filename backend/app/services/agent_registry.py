@@ -1,10 +1,8 @@
 """Business logic for tenants and agents."""
-from typing import Optional
 from uuid import UUID
-from sqlalchemy.exc import IntegrityError
-
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import generate_api_key, hash_api_key
@@ -38,7 +36,7 @@ async def create_tenant(
     await db.refresh(tenant)
     return tenant
 
-async def get_tenant(db: AsyncSession, tenant_id: UUID) -> Optional[Tenant]:
+async def get_tenant(db: AsyncSession, tenant_id: UUID) -> Tenant | None:
     result = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
     return result.scalar_one_or_none()
 
@@ -50,7 +48,7 @@ async def create_agent(
     *,
     tenant_id: UUID,
     name: str,
-    description: Optional[str],
+    description: str | None,
     role: str,
     scopes: list[str],
 ) -> tuple[Agent, str]:
@@ -89,7 +87,7 @@ async def create_agent(
     return agent, plaintext_key
 
 
-async def get_agent(db: AsyncSession, agent_id: UUID) -> Optional[Agent]:
+async def get_agent(db: AsyncSession, agent_id: UUID) -> Agent | None:
     """Fetch a single agent by its primary key. Returns None if not found."""
     result = await db.execute(select(Agent).where(Agent.id == agent_id))
     return result.scalar_one_or_none()
@@ -104,7 +102,7 @@ async def list_agents(db: AsyncSession, tenant_id: UUID) -> list[Agent]:
 
 async def authenticate_by_api_key(
     db: AsyncSession, *, api_key: str
-) -> Optional[Agent]:
+) -> Agent | None:
     """Look up an agent by its hashed API key. Returns None if no match."""
     hashed = hash_api_key(api_key)
     result = await db.execute(select(Agent).where(Agent.api_key_hash == hashed))

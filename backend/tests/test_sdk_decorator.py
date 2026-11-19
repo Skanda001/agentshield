@@ -15,12 +15,12 @@ in the Phase 1 security audit:
   - Unknown verdict   + fail_closed=False → ShieldError still (never silently allow)
 """
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from shield.decorator import protect
-from shield.exceptions import ShieldBlocked, ShieldEscalated, ShieldError
+from shield.exceptions import ShieldBlocked, ShieldError, ShieldEscalated
 from shield.models import Decision
 
 

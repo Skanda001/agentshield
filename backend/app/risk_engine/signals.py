@@ -4,12 +4,11 @@ Signals are deterministic and explainable.
 ML models (v2) will be layered on top later, not replace these.
 """
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from app.detection.injection.heuristics import detect as detect_injection
 from app.detection.pii.presidio_wrapper import detect as detect_pii
 from app.schemas.decision import Signal
-
 
 # ─── Knowledge tables ─────────────────────────────────────────
 
@@ -51,20 +50,48 @@ PII_EXTERNAL_BONUS = {
 
 def infer_action(tool: str) -> str:
     name = tool.lower()
-    for verb in ("delete", "drop", "wire", "transfer", "refund", "send", "create", "update", "write", "execute", "list", "read", "admin"):
+    # High-impact destructive & financial actions
+    for verb in ("delete", "remove", "erase", "wipe", "destroy", "purge", "drop"):
         if verb in name:
-            return verb
+            return "delete"
+    for verb in ("wire", "transfer", "payout"):
+        if verb in name:
+            return "transfer" if verb != "wire" else "wire"
+    for verb in ("refund",):
+        if verb in name:
+            return "refund"
+    for verb in ("send", "dispatch", "mail", "post"):
+        if verb in name:
+            return "send"
+    for verb in ("execute", "exec", "eval", "run"):
+        if verb in name:
+            return "execute"
+    for verb in ("admin", "privilege", "grant", "revoke"):
+        if verb in name:
+            return "admin"
+    for verb in ("update", "modify", "edit", "write", "set"):
+        if verb in name:
+            return "update"
+    for verb in ("create", "add", "insert", "new"):
+        if verb in name:
+            return "create"
+    for verb in ("list", "query", "find", "search"):
+        if verb in name:
+            return "list"
+    for verb in ("read", "get", "fetch", "lookup", "view"):
+        if verb in name:
+            return "read"
     return "read"
 
 
-def infer_resource_type(tool: str, explicit: Optional[str]) -> str:
+def infer_resource_type(tool: str, explicit: str | None) -> str:
     if explicit:
         return explicit.lower()
     name = tool.lower()
-    for resource in ("customer", "order", "product", "invoice", "payment",
+    for resource in ("customer", "user", "client", "account", "order", "product", "invoice", "payment",
                      "credential", "audit", "email"):
         if resource in name:
-            return resource
+            return "customer" if resource in ("user", "client", "account") else resource
     if any(k in name for k in ("transfer", "fund", "balance", "bank", "account", "wire", "refund")):
         return "payment"
     return "public"
@@ -101,7 +128,7 @@ def extract_signals(
     *,
     tool: str,
     arguments: dict[str, Any],
-    resource_type_explicit: Optional[str] = None,
+    resource_type_explicit: str | None = None,
 ) -> SignalResult:
     signals: list[Signal] = []
 

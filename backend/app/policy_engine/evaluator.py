@@ -6,10 +6,9 @@ Conflicts are resolved by priority (highest wins); ties go to the more
 restrictive effect (deny > escalate > allow).
 """
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from app.schemas.policy import PolicyDocument, RuleSchema
-
 
 # Higher = more restrictive. Used for tie-breaking at equal priority.
 EFFECT_RANK = {"allow": 0, "mask": 1, "escalate": 2, "deny": 3}
@@ -22,18 +21,18 @@ class EvalContext:
     action: str
     resource_type: str
     arguments: dict[str, Any]
-    data_classification: Optional[str] = None
+    data_classification: str | None = None
 
 
 @dataclass
 class EvalResult:
-    matched_rule: Optional[str]
-    effect: Optional[str]
+    matched_rule: str | None
+    effect: str | None
     reason: str
     priority: int
 
 
-def _field_matches(rule_value: Optional[str], ctx_value: str) -> bool:
+def _field_matches(rule_value: str | None, ctx_value: str) -> bool:
     if rule_value is None:
         return True
     return rule_value.lower() == ctx_value.lower()

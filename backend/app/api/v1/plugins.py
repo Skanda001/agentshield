@@ -14,10 +14,11 @@ import logging
 import os
 import shutil
 import sys
+import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,8 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import chain as audit_chain
-from app.core.config import settings
-from app.core.deps import get_current_agent, get_optional_agent, get_db
+from app.core.deps import get_db, get_optional_agent
 from app.core.security import create_agent_token, generate_api_key, hash_api_key
 from app.db.models.agent import Agent
 from app.db.models.tenant import Tenant
@@ -67,7 +67,7 @@ def _find_dir(dir_name: str) -> Path:
                         return c.resolve()
                 else:
                     return c.resolve()
-        except Exception:
+        except Exception:  # noqa: S112
             continue
 
     target = backend_or_container / dir_name
@@ -75,7 +75,7 @@ def _find_dir(dir_name: str) -> Path:
         target.mkdir(parents=True, exist_ok=True)
         return target.resolve()
     except Exception:
-        fallback = Path(f"/tmp/{dir_name}")
+        fallback = Path(tempfile.gettempdir()) / dir_name
         fallback.mkdir(parents=True, exist_ok=True)
         return fallback.resolve()
 
@@ -103,18 +103,18 @@ class AgentPluginInfo(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     tools: list[ToolManifest] = Field(default_factory=list)
     is_plugged_in: bool = False
-    mount_path: Optional[str] = None
+    mount_path: str | None = None
     status: str = "unplugged"
     external_path: str
-    last_action_at: Optional[str] = None
-    token: Optional[str] = None
+    last_action_at: str | None = None
+    token: str | None = None
 
 
 class PlugActionResponse(BaseModel):
     ok: bool
     agent_id: str
     is_plugged_in: bool
-    mount_path: Optional[str] = None
+    mount_path: str | None = None
     message: str
     plugin: AgentPluginInfo
 
@@ -122,7 +122,7 @@ class PlugActionResponse(BaseModel):
 class PluginRunRequest(BaseModel):
     agent_id: str
     prompt: str = Field(min_length=1, max_length=2000)
-    run_id: Optional[str] = None
+    run_id: str | None = None
     auto_approve: bool = False
 
 
@@ -150,14 +150,14 @@ def safe_rmtree(path: Path) -> None:
             try:
                 os.chmod(fp, stat.S_IWRITE)
                 os.remove(fp)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         for d in dirs:
             dp = os.path.join(root, d)
             try:
                 os.chmod(dp, stat.S_IWRITE)
                 os.rmdir(dp)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
     try:
@@ -165,7 +165,7 @@ def safe_rmtree(path: Path) -> None:
     except Exception:
         if sys.platform == "win32":
             import subprocess
-            subprocess.run(f'rd /s /q "{str(path)}"', shell=True, capture_output=True)
+            subprocess.run(f'rd /s /q "{str(path)}"', shell=True, capture_output=True)  # noqa: S602
 
 
 def _get_agent_info(agent_dir: Path, is_plugged_in: bool) -> AgentPluginInfo:
@@ -182,7 +182,7 @@ def _get_agent_info(agent_dir: Path, is_plugged_in: bool) -> AgentPluginInfo:
     for t in data.get("tools", []):
         try:
             tools.append(ToolManifest(**t))
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     return AgentPluginInfo(
@@ -250,7 +250,7 @@ async def list_plugins():
 async def plug_in_agent(
     agent_id: str,
     db: AsyncSession = Depends(get_db),
-    current_agent: Optional[Agent] = Depends(get_optional_agent),
+    current_agent: Agent | None = Depends(get_optional_agent),
 ):
     """Mount external agent into `agentshield/plugged_agents/<agent_id>`, activating it on the gateway."""
     src_dir = EXTERNAL_AGENTS_DIR / agent_id
@@ -276,17 +276,20 @@ async def plug_in_agent(
     info = _get_agent_info(src_dir, is_plugged_in=True)
 
     # Determine tenant
+    tenant_id: UUID
     if current_agent:
         tenant_id = current_agent.tenant_id
     else:
         tenant_res = await db.execute(select(Tenant.id).limit(1))
-        tenant_id = tenant_res.scalar_one_or_none()
-        if not tenant_id:
+        existing_tenant_id = tenant_res.scalar_one_or_none()
+        if not existing_tenant_id:
             new_tenant = Tenant(name="Default Tenant", slug="default-tenant")
             db.add(new_tenant)
             await db.commit()
             await db.refresh(new_tenant)
             tenant_id = new_tenant.id
+        else:
+            tenant_id = existing_tenant_id
 
     # Register / Activate in database for this tenant
     res = await db.execute(
@@ -366,7 +369,7 @@ async def plug_in_agent(
 async def plug_out_agent(
     agent_id: str,
     db: AsyncSession = Depends(get_db),
-    current_agent: Optional[Agent] = Depends(get_optional_agent),
+    current_agent: Agent | None = Depends(get_optional_agent),
 ):
     """Unmount agent from `agentshield/plugged_agents/<agent_id>`, deleting the folder and revoking gateway access."""
     target_dir = PLUGGED_AGENTS_DIR / agent_id
@@ -421,7 +424,7 @@ async def plug_out_agent(
 async def run_plugin_agent(
     payload: PluginRunRequest,
     db: AsyncSession = Depends(get_db),
-    _current_agent: Optional[Agent] = Depends(get_optional_agent),
+    _current_agent: Agent | None = Depends(get_optional_agent),
 ):
     """Execute a plugged-in agent against a prompt with live event streaming."""
     target_dir = PLUGGED_AGENTS_DIR / payload.agent_id
@@ -448,7 +451,7 @@ async def run_plugin_agent(
     if sdk_src.exists():
         try:
             shutil.copy2(sdk_src, target_dir / "shield.py")
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     # Resolve internal gateway URL & issue valid agent token
@@ -457,7 +460,7 @@ async def run_plugin_agent(
     os.environ["AGENTSHIELD_URL"] = gateway_url
 
     agent_token = None
-    db_agent: Optional[Agent] = None
+    db_agent: Agent | None = None
     try:
         res = await db.execute(
             select(Agent)
@@ -523,7 +526,7 @@ async def run_plugin_agent(
 
     # 1. Stream step event: Intent started
     start_event = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "run_id": run_id,
         "agent_id": payload.agent_id,
         "step": 1,
@@ -561,8 +564,8 @@ async def run_plugin_agent(
         def in_process_decide(
             tool: str,
             arguments: dict[str, Any],
-            resource_type: Optional[str] = None,
-            data_classification: Optional[str] = "internal",
+            resource_type: str | None = None,
+            data_classification: str | None = "internal",
         ) -> dict[str, Any]:
             async def _async_decide():
                 from app.db.session import AsyncSessionLocal
@@ -606,7 +609,7 @@ async def run_plugin_agent(
             approval_id: str,
             approved: bool = True,
             decided_by: str = "supervisor",
-            note: Optional[str] = None,
+            note: str | None = None,
         ) -> dict[str, Any]:
             async def _async_approval():
                 from app.db.session import AsyncSessionLocal
@@ -679,7 +682,7 @@ async def run_plugin_agent(
     except Exception as e:
         logger.exception("Error executing plugged agent %s: %s", payload.agent_id, e)
         error_event = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "run_id": run_id,
             "agent_id": payload.agent_id,
             "step": 2,
@@ -707,7 +710,7 @@ async def run_plugin_agent(
     verdict = run_res.get("verdict", "ALLOW")
     tool_name = run_res.get("tool", "tool_call")
     tool_event = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "run_id": run_id,
         "agent_id": payload.agent_id,
         "step": 2,
@@ -734,7 +737,7 @@ async def run_plugin_agent(
 
     # 4. Stream final answer
     final_event = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "run_id": run_id,
         "agent_id": payload.agent_id,
         "step": 3,

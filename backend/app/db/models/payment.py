@@ -1,7 +1,6 @@
 """Payment model — synthetic payment records tied to orders."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
@@ -11,7 +10,7 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Payment(Base):
@@ -32,7 +31,7 @@ class Payment(Base):
         nullable=False,
         index=True,
     )
-    order_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    order_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("orders.id", ondelete="SET NULL"),
         nullable=True,

@@ -7,12 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_agent, get_db
+
 # get_optional_agent removed — all policy endpoints now require auth
 from app.detection.pii.masker import mask_pii_in_data
-from app.risk_engine.signals import extract_signals
-from app.risk_engine.deterministic import evaluate as evaluate_risk
-from app.db.models.policy import Policy, PolicyVersion
 from app.policy_engine.dsl import PolicyParseError, load_and_validate
+from app.risk_engine.deterministic import evaluate as evaluate_risk
+from app.risk_engine.signals import extract_signals
 from app.schemas.policy import (
     PolicyCreate,
     PolicyEvaluationPreview,
@@ -30,28 +30,28 @@ router = APIRouter(tags=["policies"])
 async def create_policy(
     payload: PolicyCreate,
     db: AsyncSession = Depends(get_db),
-    _agent=Depends(get_current_agent),
+    agent=Depends(get_current_agent),
 ):
     try:
         policy = await svc.create_policy(
             db,
-            tenant_id=payload.tenant_id,
+            tenant_id=agent.tenant_id,
             name=payload.name,
             description=payload.description,
             document=payload.document,
         )
     except svc.PolicyServiceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return policy
 
 
 @router.get("/policies", response_model=list[PolicyOut])
 async def list_policies(
-    tenant_id: UUID,
+    tenant_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
-    _agent=Depends(get_current_agent),
+    agent=Depends(get_current_agent),
 ):
-    return await svc.list_policies(db, tenant_id)
+    return await svc.list_policies(db, agent.tenant_id)
 
 
 @router.post("/policies/load-yaml", response_model=PolicyOut)
@@ -81,7 +81,7 @@ async def load_policy_from_yaml(
     try:
         document = load_and_validate(str(resolved))
     except PolicyParseError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
         policy = await svc.create_policy(
@@ -92,7 +92,7 @@ async def load_policy_from_yaml(
             document=document,
         )
     except svc.PolicyServiceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return policy
 
 
@@ -100,8 +100,11 @@ async def load_policy_from_yaml(
 async def list_versions(
     policy_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _agent=Depends(get_current_agent),
+    agent=Depends(get_current_agent),
 ):
+    policy = await svc.get_policy(db, policy_id)
+    if not policy or str(policy.tenant_id) != str(agent.tenant_id):
+        raise HTTPException(status_code=404, detail="Policy not found")
     from app.policy_engine.versioning import list_versions as list_v
     return await list_v(db, policy_id)
 
@@ -116,7 +119,7 @@ async def evaluate(
     agent=Depends(get_current_agent),
 ):
     policy = await svc.get_policy(db, policy_id)
-    if not policy:
+    if not policy or str(policy.tenant_id) != str(agent.tenant_id):
         raise HTTPException(status_code=404, detail="Policy not found")
     return await svc.preview_evaluation(
         db,

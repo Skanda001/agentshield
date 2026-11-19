@@ -1,6 +1,6 @@
 """Audit chain HTTP endpoints."""
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -69,14 +69,14 @@ class CallLogItem(BaseModel):
     risk_score: float
     arguments: dict[str, Any]
     agent_id: UUID
-    policy_rule: Optional[str] = None
-    policy_effect: Optional[str] = None
-    data_classification: Optional[str] = None
+    policy_rule: str | None = None
+    policy_effect: str | None = None
+    data_classification: str | None = None
 
 
 @router.get("/audit/logs", response_model=list[CallLogItem])
 async def list_audit_logs(
-    verdict: Optional[str] = Query(default=None),
+    verdict: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     agent=Depends(get_current_agent),

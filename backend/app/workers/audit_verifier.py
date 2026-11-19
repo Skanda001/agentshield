@@ -6,7 +6,6 @@ would trigger alerting in production).
 """
 import asyncio
 import logging
-from typing import Optional
 
 from app.audit.verifier import verify_chain
 from app.db.session import AsyncSessionLocal
@@ -39,7 +38,7 @@ async def verify_once() -> bool:
 
 async def periodic_verifier(
     interval_seconds: int = DEFAULT_INTERVAL_SECONDS,
-    stop_event: Optional[asyncio.Event] = None,
+    stop_event: asyncio.Event | None = None,
 ) -> None:
     """Loop: verify, sleep, repeat. Stops if stop_event is set."""
     while True:
@@ -56,5 +55,5 @@ async def periodic_verifier(
                 await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
                 return
             await asyncio.sleep(interval_seconds)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass

@@ -1,6 +1,6 @@
 """Pydantic schemas for approvals."""
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,14 +13,14 @@ class ApprovalOut(BaseModel):
     tenant_id: UUID
     status: str
     tool: str
-    resource_type: Optional[str]
+    resource_type: str | None
     request_context: dict[str, Any]
-    decided_by: Optional[str]
-    decision_note: Optional[str]
-    decided_at: Optional[datetime]
-    notified_at: Optional[datetime]
-    notification_channel: Optional[str]
-    notification_error: Optional[str]
+    decided_by: str | None
+    decision_note: str | None
+    decided_at: datetime | None
+    notified_at: datetime | None
+    notification_channel: str | None
+    notification_error: str | None
     expires_at: datetime
     created_at: datetime
 
@@ -29,4 +29,4 @@ class ApprovalOut(BaseModel):
 
 class ApprovalDecision(BaseModel):
     approved: bool
-    note: Optional[str] = Field(default=None, max_length=1000)
+    note: str | None = Field(default=None, max_length=1000)

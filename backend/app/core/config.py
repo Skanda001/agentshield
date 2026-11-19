@@ -1,5 +1,5 @@
 """Centralized settings loaded from environment, with production safety checks."""
-from typing import List, Literal
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -82,7 +82,7 @@ class Settings(BaseSettings):
         return v
 
     @property
-    def cors_origins_list(self) -> List[str]:
+    def cors_origins_list(self) -> list[str]:
         """Parse CORS_ORIGINS comma-separated string into a list.
 
         Falls back to [] (deny all) in production when the list is empty.

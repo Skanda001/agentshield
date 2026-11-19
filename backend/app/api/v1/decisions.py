@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -77,8 +76,8 @@ async def get_decision_stats(
 @router.get("/decisions", response_model=list[DecisionOut])
 async def list_decisions(
     limit: int = 50,
-    before: Optional[str] = None,
-    agent_id: Optional[UUID] = None,
+    before: str | None = None,
+    agent_id: UUID | None = None,
     agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
 ):

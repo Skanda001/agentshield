@@ -14,10 +14,8 @@ Properties verified:
   7. No matching rule → effect=None, matched_rule=None.
 """
 import pytest
-
 from app.policy_engine.evaluator import EvalContext, evaluate_policy
 from app.schemas.policy import PolicyDocument
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 

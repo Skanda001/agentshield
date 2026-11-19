@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -52,14 +52,14 @@ class CallLogItem(BaseModel):
     risk_score: float
     arguments: dict[str, Any]
     agent_id: UUID
-    policy_rule: Optional[str] = None
-    policy_effect: Optional[str] = None
-    data_classification: Optional[str] = None
+    policy_rule: str | None = None
+    policy_effect: str | None = None
+    data_classification: str | None = None
 
 
 class SupabaseStatusResponse(BaseModel):
     is_configured: bool
-    supabase_url: Optional[str] = None
+    supabase_url: str | None = None
     supabase_table: str
     total_calls_logged: int
     allowed_count: int
@@ -121,8 +121,8 @@ async def get_sql_schema(
 
 @router.get("/logs", response_model=list[CallLogItem])
 async def list_call_logs(
-    verdict: Optional[str] = Query(default=None, pattern=r"^(ALLOW|ESCALATE|HITL|BLOCK)$"),
-    tool: Optional[str] = None,
+    verdict: str | None = Query(default=None, pattern=r"^(ALLOW|ESCALATE|HITL|BLOCK)$"),
+    tool: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
     agent: Agent = Depends(get_current_agent),
@@ -214,5 +214,6 @@ async def trigger_supabase_sync(
         url=settings.SUPABASE_URL,
         key=settings.SUPABASE_KEY,
         table=settings.SUPABASE_TABLE,
+        tenant_id=agent.tenant_id,
     )
     return res

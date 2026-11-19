@@ -13,18 +13,12 @@ All tests run synchronously via asyncio.run() against a fake in-memory
 "database" built from plain Python objects — no Postgres connection needed.
 """
 import asyncio
-import copy
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from datetime import UTC, datetime
 
 from app.audit.chain import GENESIS_HASH
 from app.core.crypto import compute_event_hash, sign_hash
-
 
 # ─── Minimal fake AuditLog row ───────────────────────────────────────────────
 
@@ -42,13 +36,13 @@ class FakeAuditLog:
     seq: int
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     event_type: str = "test.event"
-    agent_id: Optional[uuid.UUID] = None
-    tenant_id: Optional[uuid.UUID] = None
+    agent_id: uuid.UUID | None = None
+    tenant_id: uuid.UUID | None = None
     payload: dict = field(default_factory=dict)
     prev_hash: str = GENESIS_HASH
     hash: str = ""
     signature: str = ""
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 def _build_chain(n: int) -> list[FakeAuditLog]:
@@ -76,7 +70,7 @@ def _build_chain(n: int) -> list[FakeAuditLog]:
 
 # ─── Fake DB session that returns a fixed list of events ─────────────────────
 
-def _mock_db(events: list[FakeAuditLog], pred_event: Optional[FakeAuditLog] = None):
+def _mock_db(events: list[FakeAuditLog], pred_event: FakeAuditLog | None = None):
     """Return an AsyncSession mock that yields `events` from execute()."""
 
     class FakeResult:

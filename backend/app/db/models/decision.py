@@ -1,7 +1,6 @@
 """Decision model. One row per tool-call decision AgentShield makes."""
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -11,7 +10,7 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Decision(Base):
@@ -35,7 +34,7 @@ class Decision(Base):
 
     tool: Mapped[str] = mapped_column(String(120), nullable=False)
     action: Mapped[str] = mapped_column(String(40), nullable=False)
-    resource_type: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    resource_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     arguments: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
     verdict: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -43,20 +42,20 @@ class Decision(Base):
     reasons: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     signals: Mapped[dict] = mapped_column(JSONB, default=list, nullable=False)
 
-    policy_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    policy_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("policies.id", ondelete="SET NULL"),
         nullable=True, index=True,
     )
-    policy_rule: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
-    policy_effect: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    policy_rule: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    policy_effect: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     injection_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     # PII / DLP (added Chunk 7)
-    pii_classification: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    pii_classification: Mapped[str | None] = mapped_column(String(20), nullable=True)
     pii_labels: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
 
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False

@@ -12,8 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.detection.pii.indian_pii import PIIMatch, find_all as find_indian
-
+from app.detection.pii.indian_pii import PIIMatch
+from app.detection.pii.indian_pii import find_all as find_indian
 
 # ─── Generic recognizers (cross-locale) ───────────────────────
 
@@ -85,7 +85,7 @@ def _flatten(value: Any) -> str:
         return value
     if isinstance(value, dict):
         return " ".join(_flatten(v) for v in value.values())
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return " ".join(_flatten(v) for v in value)
     if value is None:
         return ""
@@ -124,14 +124,14 @@ def detect(arguments: dict[str, Any]) -> PIIDetectionResult:
     summary: list[str] = []
     seen_labels: set[str] = set()
 
-    for m in matches:
-        sensitivity = PII_SENSITIVITY.get(m.label, "internal")
+    for match in matches:
+        sensitivity = PII_SENSITIVITY.get(match.label, "internal")
         if _CLASSIFICATION_RANK[sensitivity] > _CLASSIFICATION_RANK[highest]:
             highest = sensitivity
         total_points += _SENSITIVITY_POINTS.get(sensitivity, 0)
-        if m.label not in seen_labels:
-            seen_labels.add(m.label)
-            summary.append(f"{m.label} detected ({sensitivity})")
+        if match.label not in seen_labels:
+            seen_labels.add(match.label)
+            summary.append(f"{match.label} detected ({sensitivity})")
 
     return PIIDetectionResult(
         matches=matches,

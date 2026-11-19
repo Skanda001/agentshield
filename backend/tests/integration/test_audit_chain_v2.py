@@ -9,18 +9,46 @@ Set RUN_INTEGRATION_TESTS=1 to enable.
 import os
 
 import pytest
-from sqlalchemy import delete
-
 from app.audit import chain as audit_chain
 from app.audit.verifier import verify_chain
 from app.db.models.audit_log import AuditLog
 from app.db.session import AsyncSessionLocal
-
+from sqlalchemy import delete, text
+from sqlalchemy.exc import ProgrammingError
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("RUN_INTEGRATION_TESTS") != "1",
+    os.getenv("RUN_INTEGRATION_TESTS") not in ("1", "true", "True"),
     reason="set RUN_INTEGRATION_TESTS=1 to run integration tests against the live DB",
 )
+
+
+@pytest.mark.asyncio
+async def test_normal_code_cannot_modify_rows():
+    """PostgreSQL triggers reject UPDATE and DELETE on audit_log rows."""
+    async with AsyncSessionLocal() as db:
+        e = await audit_chain.append_event(
+            db, event_type="test.immutable", payload={"immutable": True}
+        )
+        await db.commit()
+        e_seq = e.seq
+
+        # Direct UPDATE must fail loudly at the DB level
+        with pytest.raises(ProgrammingError) as exc_info:
+            await db.execute(
+                text("UPDATE audit_log SET payload = '{\"hacked\": true}' WHERE seq = :seq"),
+                {"seq": e_seq},
+            )
+        assert "audit_log is append-only" in str(exc_info.value)
+        await db.rollback()
+
+        # Direct DELETE must also fail loudly
+        with pytest.raises(ProgrammingError) as exc_info:
+            await db.execute(
+                text("DELETE FROM audit_log WHERE seq = :seq"),
+                {"seq": e_seq},
+            )
+        assert "audit_log is append-only" in str(exc_info.value)
+        await db.rollback()
 
 
 @pytest.mark.asyncio
@@ -30,9 +58,12 @@ async def test_audit_chain_detects_tampering():
         e1 = await audit_chain.append_event(
             db, event_type="test.tamper.first", payload={"n": 1}
         )
+        await db.commit()
+
         e2 = await audit_chain.append_event(
             db, event_type="test.tamper.second", payload={"n": 2}
         )
+        await db.commit()
 
         # Linkage
         assert e2.prev_hash == e1.hash
@@ -42,9 +73,14 @@ async def test_audit_chain_detects_tampering():
         result = await verify_chain(db, from_seq=e1.seq)
         assert result.valid is True, f"chain should be valid: {result}"
 
-        # Tamper e1's payload in place
-        e1.payload = {**e1.payload, "payload": {"n": 999}}
-        await db.commit()
+        # Tamper e1's payload by temporarily disabling update trigger (simulating out-of-band DB tampering)
+        try:
+            await db.execute(text("ALTER TABLE audit_log DISABLE TRIGGER audit_log_no_update"))
+            e1.payload = {**e1.payload, "payload": {"n": 999}}
+            await db.commit()
+        finally:
+            await db.execute(text("ALTER TABLE audit_log ENABLE TRIGGER audit_log_no_update"))
+            await db.commit()
 
         # Re-verify — must detect
         result = await verify_chain(db, from_seq=e1.seq)
@@ -53,6 +89,11 @@ async def test_audit_chain_detects_tampering():
         assert result.reason is not None
         assert "hash mismatch" in result.reason.lower()
 
-        # Cleanup
-        await db.execute(delete(AuditLog).where(AuditLog.seq >= e1.seq))
-        await db.commit()
+        # Cleanup test rows by temporarily disabling delete trigger
+        try:
+            await db.execute(text("ALTER TABLE audit_log DISABLE TRIGGER audit_log_no_delete"))
+            await db.execute(delete(AuditLog).where(AuditLog.seq >= e1.seq))
+            await db.commit()
+        finally:
+            await db.execute(text("ALTER TABLE audit_log ENABLE TRIGGER audit_log_no_delete"))
+            await db.commit()
