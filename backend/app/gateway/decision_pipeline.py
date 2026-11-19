@@ -73,9 +73,24 @@ async def run(
                     note=f"resumed_from_approval={approved_obj.id}",
                 )
                 db.add(decision)
+                await db.flush()
+                await audit_chain.append_event(
+                    db,
+                    event_type="decision.made",
+                    payload={
+                        "decision_id": str(decision.id),
+                        "tool": decision.tool,
+                        "verdict": decision.verdict,
+                        "risk_score": decision.risk_score,
+                        "reasons": decision.reasons,
+                        "agent_name": agent.name,
+                        "resumed_from_approval": str(approved_obj.id),
+                    },
+                    agent_id=agent.id,
+                    tenant_id=agent.tenant_id,
+                )
                 await db.commit()
                 await db.refresh(decision)
-                await _audit(decision, agent)
                 return PipelineResult(
                     decision=decision,
                     response=_to_response(decision, approval_id=approved_obj.id),
@@ -113,9 +128,23 @@ async def run(
             note=f"kill_switch_scope={ks.scope}",
         )
         db.add(decision)
+        await db.flush()
+        await audit_chain.append_event(
+            db,
+            event_type="decision.made",
+            payload={
+                "decision_id": str(decision.id),
+                "tool": decision.tool,
+                "verdict": decision.verdict,
+                "risk_score": decision.risk_score,
+                "reasons": decision.reasons,
+                "agent_name": agent.name,
+            },
+            agent_id=agent.id,
+            tenant_id=agent.tenant_id,
+        )
         await db.commit()
         await db.refresh(decision)
-        await _audit(decision, agent)
         return PipelineResult(decision=decision, response=_to_response(decision))
 
 
@@ -165,9 +194,23 @@ async def run(
             note=normalized.arguments.get("_reasoning") or normalized.arguments.get("reasoning") or normalized.arguments.get("summary"),
         )
         db.add(decision)
+        await db.flush()
+        await audit_chain.append_event(
+            db,
+            event_type="decision.made",
+            payload={
+                "decision_id": str(decision.id),
+                "tool": decision.tool,
+                "verdict": decision.verdict,
+                "risk_score": decision.risk_score,
+                "reasons": decision.reasons,
+                "agent_name": agent.name,
+            },
+            agent_id=agent.id,
+            tenant_id=agent.tenant_id,
+        )
         await db.commit()
         await db.refresh(decision)
-        await _audit(decision, agent)
         return PipelineResult(decision=decision, response=_to_response(decision))
 
     # ── 3. Risk engine ───────────────────────────────────────
@@ -214,10 +257,35 @@ async def run(
         note=normalized.arguments.get("_reasoning") or normalized.arguments.get("reasoning") or normalized.arguments.get("summary"),
     )
     db.add(decision)
-    await db.commit()
-    await db.refresh(decision)
+    await db.flush()   # write decision row; do NOT commit yet
 
-    await _audit(decision, agent)
+    # Audit event in the SAME transaction — commit once below so
+    # decision + audit event are atomic. If audit fails, decision rolls back.
+    await audit_chain.append_event(
+        db,
+        event_type="decision.made",
+        payload={
+            "decision_id": str(decision.id),
+            "tool": decision.tool,
+            "action": decision.action,
+            "resource_type": decision.resource_type,
+            "verdict": decision.verdict,
+            "risk_score": decision.risk_score,
+            "reasons": decision.reasons,
+            "policy_id": str(decision.policy_id) if decision.policy_id else None,
+            "policy_rule": decision.policy_rule,
+            "policy_effect": decision.policy_effect,
+            "injection_score": decision.injection_score,
+            "pii_classification": decision.pii_classification,
+            "pii_labels": decision.pii_labels,
+            "agent_name": agent.name,
+            "note": decision.note,
+        },
+        agent_id=agent.id,
+        tenant_id=agent.tenant_id,
+    )
+    await db.commit()          # ONE commit: decision + audit event together
+    await db.refresh(decision)
 
     # ── 5. Create approval for HITL ──────────────────────────
     approval_id = None
@@ -237,56 +305,13 @@ async def run(
     )
 
 
-async def _audit(decision: Decision, agent: Agent) -> None:
-    from app.db.session import AsyncSessionLocal
-    async with AsyncSessionLocal() as db:
-        await audit_chain.append_event(
-            db,
-            event_type="decision.made",
-            payload={
-                "decision_id": str(decision.id),
-                "tool": decision.tool,
-                "action": decision.action,
-                "resource_type": decision.resource_type,
-                "verdict": decision.verdict,
-                "risk_score": decision.risk_score,
-                "reasons": decision.reasons,
-                "policy_id": str(decision.policy_id) if decision.policy_id else None,
-                "policy_rule": decision.policy_rule,
-                "policy_effect": decision.policy_effect,
-                "injection_score": decision.injection_score,
-                "pii_classification": decision.pii_classification,
-                "pii_labels": decision.pii_labels,
-                "agent_name": agent.name,
-                "note": decision.note,
-            },
-            agent_id=agent.id,
-            tenant_id=agent.tenant_id,
-        )
-
-    # Stream to Supabase for centralized security logging
-    try:
-        from app.services.supabase_logger import log_decision_async
-        log_decision_async(
-            decision_id=decision.id,
-            tool=decision.tool,
-            verdict=decision.verdict,
-            reasons=decision.reasons or [],
-            risk_score=decision.risk_score,
-            arguments=decision.arguments or {},
-            agent_id=agent.id,
-            agent_name=agent.name,
-            policy_rule=decision.policy_rule,
-            policy_effect=decision.policy_effect,
-            data_classification=decision.pii_classification,
-            pii_labels=decision.pii_labels,
-            created_at=decision.created_at,
-        )
-    except Exception as e:
-        pass
-
-
 async def _create_approval_if_escalated(decision: Decision, agent: Agent) -> Any:
+    """Create an approval row and send Slack notification in a separate transaction.
+
+    This runs AFTER the decision has been committed, so a Slack failure
+    does not roll back the decision. The approval itself uses its own
+    session so it commits independently.
+    """
     from app.db.session import AsyncSessionLocal
     from app.hitl.slack_adapter import send_approval_request
 

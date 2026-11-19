@@ -4,8 +4,15 @@ Returns a score 0.0 - 1.0 for how suspicious the text looks, plus the
 list of matched patterns. Deterministic and explainable.
 
 v2 (later) may add an ML classifier. This file stays as the fast path.
+
+Unicode normalization
+---------------------
+Text is NFKC-normalized and zero-width / invisible characters are stripped
+before pattern matching so that attackers cannot bypass detection by
+inserting homoglyphs, zero-width joiners, or decomposed code points.
 """
 import re
+import unicodedata
 from dataclasses import dataclass
 
 
@@ -72,11 +79,33 @@ def _flatten(value) -> str:
     return str(value)
 
 
+# Zero-width and invisible Unicode categories to strip before matching.
+_ZERO_WIDTH = re.compile(
+    r"[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00ad]"
+)
+
+
+def _normalize(text: str) -> str:
+    """NFKC-normalize, strip zero-width characters, and case-fold.
+
+    Defeats evasion via:
+    - Homoglyphs / decomposed code points (NFKC)
+    - Zero-width joiners / invisible characters
+    - Mixed case obfuscation (casefold)
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = _ZERO_WIDTH.sub("", text)
+    return text  # patterns already use re.I for case folding
+
+
 def detect(arguments: dict) -> InjectionResult:
     """Score the arguments of a tool call for injection patterns."""
     text = _flatten(arguments)
     if not text:
         return InjectionResult(score=0.0, matched=[], snippet=None)
+
+    # Normalize before matching
+    text = _normalize(text)
 
     matched: list[str] = []
     total = 0.0

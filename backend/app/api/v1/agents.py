@@ -1,11 +1,12 @@
 """HTTP endpoints for tenants and agents."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.deps import get_current_agent, get_db
+from app.core.rate_limit import rate_limit
 from app.core.security import create_agent_token
 from app.schemas.agent import (
     AgentCreate,
@@ -21,6 +22,23 @@ from app.services import agent_registry as registry
 router = APIRouter(tags=["agents"])
 
 
+def _require_demo_mode() -> None:
+    """Raise 403 when DEMO_MODE is disabled.
+
+    Open registration (create tenant/agent without authentication) is only
+    allowed when the server is explicitly started in demo mode.
+    Set DEMO_MODE=true in .env to enable. Default is false.
+    """
+    if not settings.DEMO_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Open registration is disabled. "
+                "Set DEMO_MODE=true on the server to enable the demo flow."
+            ),
+        )
+
+
 # ─── Tenants ────────────────────────────────────────────────────
 
 @router.post(
@@ -32,6 +50,7 @@ async def create_tenant(
     payload: TenantCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    _require_demo_mode()
     try:
         tenant = await registry.create_tenant(
             db, name=payload.name, slug=payload.slug
@@ -52,6 +71,7 @@ async def create_agent(
     payload: AgentCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    _require_demo_mode()
     try:
         agent, plaintext_key = await registry.create_agent(
             db,
@@ -72,10 +92,11 @@ async def create_agent(
 
 @router.get("/agents", response_model=list[AgentOut])
 async def list_agents(
-    tenant_id: UUID,
     db: AsyncSession = Depends(get_db),
+    current_agent=Depends(get_current_agent),
 ):
-    return await registry.list_agents(db, tenant_id)
+    """List agents belonging to the caller's tenant only."""
+    return await registry.list_agents(db, current_agent.tenant_id)
 
 
 # ─── Auth ───────────────────────────────────────────────────────
@@ -83,8 +104,11 @@ async def list_agents(
 @router.post("/agents/token", response_model=AgentTokenResponse)
 async def issue_token(
     payload: AgentTokenRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit("token", max_calls=10, window_seconds=60)),
 ):
+    """Issue a JWT for an agent. Rate limited: 10 requests/minute per IP."""
     agent = await registry.authenticate_by_api_key(db, api_key=payload.api_key)
     if not agent:
         raise HTTPException(
@@ -112,8 +136,12 @@ async def me(current_agent=Depends(get_current_agent)):
 async def suspend(
     agent_id: UUID,
     db: AsyncSession = Depends(get_db),
-    _current=Depends(get_current_agent),
+    current=Depends(get_current_agent),
 ):
+    # Verify the target agent belongs to the caller's tenant
+    target = await registry.get_agent(db, agent_id)
+    if not target or str(target.tenant_id) != str(current.tenant_id):
+        raise HTTPException(status_code=404, detail="Agent not found")
     try:
         return await registry.suspend_agent(db, agent_id=agent_id)
     except registry.RegistryError as e:

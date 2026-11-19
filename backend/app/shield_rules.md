@@ -50,4 +50,7 @@
 | `get_customer(1042)` (PII, restricted)       | 65   | HITL     |
 | `send_email` external, PII, injection 0.95   | 100  | BLOCK    |
 | `issue_refund(10042, 4999)`                  | 55   | HITL     |
-| `delete_customer(1042)`                      | 100  | BLOCK    |
+| `delete_customer(1042)`                      | 65   | HITL     |
+
+> **Note on `delete_customer`:** Score = 40 (destructive verb) + 25 (sensitive noun "customer") = 65 → HITL.
+> A human approves before deletion runs. To reach BLOCK, add bulk flag or high injection score (> 70 total).

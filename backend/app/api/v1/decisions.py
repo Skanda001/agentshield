@@ -2,12 +2,13 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_agent, get_optional_agent, get_db
+from app.core.deps import get_current_agent, get_db
+from app.core.rate_limit import rate_limit
 from app.db.models.decision import Decision
 from app.gateway.decision_pipeline import run as run_pipeline
 from app.gateway.tool_adapter import ToolCall
@@ -19,9 +20,12 @@ router = APIRouter(tags=["decisions"])
 @router.post("/decide", response_model=DecideResponse)
 async def decide(
     payload: DecideRequest,
+    request: Request,
     agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit("decide", max_calls=120, window_seconds=60)),
 ):
+    """Make a security decision. Rate limited: 120 requests/minute per agent IP."""
     result = await run_pipeline(
         db,
         agent=agent,
@@ -45,15 +49,14 @@ class DecisionStats(BaseModel):
 
 @router.get("/decisions/stats", response_model=DecisionStats)
 async def get_decision_stats(
-    agent_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
-    _agent=Depends(get_optional_agent),
+    agent=Depends(get_current_agent),
 ):
-    """Return aggregate lifetime stats across all decisions (or by agent)."""
+    """Return aggregate lifetime stats scoped to the caller's tenant."""
+    tid = agent.tenant_id
+
     def _query(extra_filter=None):
-        stmt = select(func.count(Decision.id))
-        if agent_id:
-            stmt = stmt.where(Decision.agent_id == agent_id)
+        stmt = select(func.count(Decision.id)).where(Decision.tenant_id == tid)
         if extra_filter is not None:
             stmt = stmt.where(extra_filter)
         return stmt
@@ -76,19 +79,21 @@ async def list_decisions(
     limit: int = 50,
     before: Optional[str] = None,
     agent_id: Optional[UUID] = None,
-    _agent=Depends(get_optional_agent),
+    agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
 ):
-    """List decisions for dashboard monitoring, newest first.
+    """List decisions for the caller's tenant, newest first.
 
-    If agent_id is provided, filter to that agent.
-    If not provided, returns all gateway decisions matching the audit log.
+    If agent_id is provided it must belong to the same tenant — cross-tenant
+    agent_id values are silently ignored.
     """
-    query = select(Decision)
-    if agent_id:
+    query = select(Decision).where(Decision.tenant_id == agent.tenant_id)
+
+    # Only honour agent_id filter when it matches the caller's own agent
+    # (prevents enumerating another tenant's agent decisions)
+    if agent_id and agent_id == agent.id:
         query = query.where(Decision.agent_id == agent_id)
 
-    # Fix #23: cursor-based pagination
     if before:
         try:
             before_dt = datetime.fromisoformat(before.replace("Z", "+00:00"))

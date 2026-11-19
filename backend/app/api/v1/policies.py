@@ -1,10 +1,16 @@
 """Policy HTTP endpoints."""
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_agent, get_optional_agent, get_db
+from app.core.config import settings
+from app.core.deps import get_current_agent, get_db
+# get_optional_agent removed — all policy endpoints now require auth
+from app.detection.pii.masker import mask_pii_in_data
+from app.risk_engine.signals import extract_signals
+from app.risk_engine.deterministic import evaluate as evaluate_risk
 from app.db.models.policy import Policy, PolicyVersion
 from app.policy_engine.dsl import PolicyParseError, load_and_validate
 from app.schemas.policy import (
@@ -50,20 +56,37 @@ async def list_policies(
 
 @router.post("/policies/load-yaml", response_model=PolicyOut)
 async def load_policy_from_yaml(
-    tenant_id: UUID,
     file_path: str,
     db: AsyncSession = Depends(get_db),
-    _agent=Depends(get_optional_agent),
+    agent=Depends(get_current_agent),
 ):
+    """Load a policy from a YAML file on the server.
+
+    Path traversal protection: the resolved path must remain inside POLICY_DIR.
+    Symlinks that escape the directory are also rejected.
+    """
+    policy_dir = Path(settings.POLICY_DIR).resolve()
+    resolved = (policy_dir / file_path).resolve()
+
+    # Reject paths that escape the policy directory (e.g. ../../etc/passwd)
+    if not resolved.is_relative_to(policy_dir):
+        raise HTTPException(
+            status_code=400,
+            detail="file_path must be inside the server's policy directory",
+        )
+    # Reject symlinks that could escape via indirection
+    if resolved.is_symlink():
+        raise HTTPException(status_code=400, detail="Symlinks are not allowed")
+
     try:
-        document = load_and_validate(file_path)
+        document = load_and_validate(str(resolved))
     except PolicyParseError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     try:
         policy = await svc.create_policy(
             db,
-            tenant_id=tenant_id,
+            tenant_id=agent.tenant_id,  # always from authenticated principal
             name=document.name,
             description=document.description,
             document=document,
@@ -113,10 +136,6 @@ async def simulate_policy(
     agent=Depends(get_current_agent),
 ):
     """Dry-run simulation of a tool call against the active policy and risk engine without DB writes."""
-    from app.detection.pii.masker import mask_pii_in_data
-    from app.risk_engine.signals import extract_signals
-    from app.risk_engine.deterministic import evaluate as evaluate_risk
-
     # 1. Signals & heuristics
     sig = extract_signals(
         tool=payload.tool,

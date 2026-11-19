@@ -89,6 +89,12 @@ async def create_agent(
     return agent, plaintext_key
 
 
+async def get_agent(db: AsyncSession, agent_id: UUID) -> Optional[Agent]:
+    """Fetch a single agent by its primary key. Returns None if not found."""
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    return result.scalar_one_or_none()
+
+
 async def list_agents(db: AsyncSession, tenant_id: UUID) -> list[Agent]:
     result = await db.execute(
         select(Agent).where(Agent.tenant_id == tenant_id).order_by(Agent.created_at.desc())

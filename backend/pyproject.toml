@@ -1,0 +1,43 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "S",    # bandit (security)
+    "C4",   # flake8-comprehensions
+]
+ignore = [
+    "E501",   # line too long (formatter handles this)
+    "S101",   # use of assert (fine in tests)
+    "S105",   # hardcoded password (many false positives in settings defaults)
+    "B008",   # do not perform function calls in default arguments (FastAPI Depends pattern)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]   # relax security + bugbear in tests
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+# Start non-strict, tighten core modules:
+[[tool.mypy.overrides]]
+module = ["app.core.*", "app.audit.*", "app.risk_engine.*", "app.policy_engine.*"]
+disallow_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

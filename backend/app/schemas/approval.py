@@ -29,5 +29,4 @@ class ApprovalOut(BaseModel):
 
 class ApprovalDecision(BaseModel):
     approved: bool
-    decided_by: str = Field(min_length=1, max_length=120)
     note: Optional[str] = Field(default=None, max_length=1000)

@@ -3,15 +3,44 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import chain as audit_chain
+from app.db.models.agent import Agent
 from app.db.models.kill_switch import KillSwitch
+from app.db.models.tenant import Tenant
 
 
 class KillSwitchError(Exception):
     pass
+
+
+async def verify_target_in_tenant(
+    db: AsyncSession,
+    *,
+    scope: str,
+    target_id: str,
+    tenant_id: UUID,
+) -> None:
+    """Raise 403 if target_id does not belong to tenant_id for the given scope."""
+    if scope == "agent":
+        result = await db.execute(
+            select(Agent).where(Agent.id == target_id, Agent.tenant_id == tenant_id)
+        )
+        if not result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="target_id does not belong to your tenant",
+            )
+    elif scope == "tenant":
+        if str(target_id) != str(tenant_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="target_id must match your own tenant_id for scope 'tenant'",
+            )
+    # scope "tool" uses a tool name string — no DB cross-check needed
 
 
 async def activate(
@@ -21,6 +50,7 @@ async def activate(
     target_id: Optional[str],
     reason: str,
     activated_by: str,
+    tenant_id: Optional[UUID] = None,
 ) -> KillSwitch:
     # Idempotence check: if an active switch already exists for this scope+target, reject
     stmt = select(KillSwitch).where(
@@ -41,6 +71,7 @@ async def activate(
         reason=reason,
         activated_by=activated_by,
         is_active=True,
+        tenant_id=tenant_id,
     )
     db.add(ks)
     await db.commit()
@@ -55,6 +86,7 @@ async def activate(
             "target_id": target_id,
             "reason": reason,
             "activated_by": activated_by,
+            "tenant_id": str(tenant_id) if tenant_id else None,
         },
     )
     return ks
@@ -102,12 +134,19 @@ async def list_switches(
     active_only: bool = False,
     scope: Optional[str] = None,
     limit: int = 100,
+    tenant_id: Optional[UUID] = None,
 ) -> list[KillSwitch]:
     stmt = select(KillSwitch).order_by(KillSwitch.activated_at.desc()).limit(max(1, min(limit, 500)))
     if active_only:
         stmt = stmt.where(KillSwitch.is_active == True)  # noqa: E712
     if scope:
         stmt = stmt.where(KillSwitch.scope == scope)
+    # Show: global switches (visible to all tenants) + caller's own tenant switches
+    if tenant_id:
+        from sqlalchemy import or_
+        stmt = stmt.where(
+            or_(KillSwitch.scope == "global", KillSwitch.tenant_id == tenant_id)
+        )
     result = await db.execute(stmt)
     return list(result.scalars().all())
 

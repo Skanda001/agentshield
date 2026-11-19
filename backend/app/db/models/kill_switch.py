@@ -19,6 +19,7 @@ class KillSwitch(Base):
     __table_args__ = (
         Index("ix_kill_switches_scope_active", "scope", "is_active"),
         Index("ix_kill_switches_target_active", "target_id", "is_active"),
+        Index("ix_kill_switches_tenant", "tenant_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -34,6 +35,12 @@ class KillSwitch(Base):
     #   tenant -> tenants.id (stringified UUID)
     #   global -> null
     target_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, index=True)
+
+    # The tenant that owns this switch (null only for global switches, which are
+    # created by admins and are visible to all tenants).
+    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
 
     reason: Mapped[str] = mapped_column(Text, nullable=False)
 

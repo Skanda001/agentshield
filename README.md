@@ -103,6 +103,33 @@ AgentShield was benchmarked against a standalone two-agent simulation framework 
 | **False Positives (Benign Blocked)** | **0** (100% of benign inquiries resolved) |
 | **Audit Ledger Integrity** | **Valid** (570+ cryptographic chain entries verified) |
 
+> [!NOTE]
+> **Methodology**: Results are from a single controlled simulation run against the two agents above.
+> Detection rates reflect the specific attack patterns and tool set used in that benchmark.
+> Generalisation to production traffic with novel attack patterns is not guaranteed.
+> The deterministic risk engine's signal weights are documented in
+> [`backend/app/shield_rules.md`](backend/app/shield_rules.md).
+
+---
+
+## 🚫 What AgentShield Does NOT Do
+
+Understanding the boundaries is as important as the capabilities:
+
+* **Does not sandbox tool execution** — it gates the *call* but cannot prevent a tool
+  from causing side-effects if the host process is compromised before the call reaches the gateway.
+* **Does not replace application-level RBAC** — AgentShield adds a runtime security layer;
+  your tools still need their own permission checks.
+* **Tail truncation is not detectable by default** — the hash chain detects modification and
+  deletion of events within the visible window, but cannot detect a silent truncation of the
+  newest events without a periodic signed checkpoint (documented in `limitations.md`).
+* **Tool-name inference is heuristic** — risk scoring uses tool name substrings. A caller
+  that names a destructive tool something benign-sounding may receive a lower initial score.
+  Mitigate by registering canonical tool manifests. See `limitations.md`.
+* **SDK fail-open requires explicit opt-in** — the `@protect` decorator raises `ShieldError`
+  by default when the gateway is unreachable. Pass `fail_closed=False` only for tools where
+  availability matters more than security.
+
 ---
 
 ## 🛠️ System Architecture
@@ -118,6 +145,22 @@ AgentShield was benchmarked against a standalone two-agent simulation framework 
 ---
 
 ## 🏁 Quickstart
+
+### Five commands from a clean clone
+
+```bash
+git clone <repo-url> agentshield && cd agentshield/backend
+cp ../.env.example .env          # fill in secrets before running in production
+pip install -r requirements.txt -r requirements-dev.txt
+alembic upgrade head
+pytest tests/unit -q             # all unit tests pass without a live DB
+```
+
+> [!IMPORTANT]
+> The `.env.example` file documents every required environment variable.
+> Copy it to `.env` and set real values for `AGENTSHIELD_JWT_SECRET`,
+> `AUDIT_HMAC_SECRET`, and `API_KEY_HMAC_SECRET` before deploying.
+> Each must be at least 32 characters and all three must be **different**.
 
 ### Option 1: Explore the Live Cloud Dashboard
 1. Open the [Vercel Dashboard](https://agentshield-eight.vercel.app).

@@ -2,8 +2,17 @@
 
 Walks the chain from the first event to the last, recomputing each hash
 and verifying each HMAC signature. Reports the first point of failure.
+
+Detects:
+- Modified payload (hash mismatch)
+- Modified hash or signature (HMAC failure)
+- Deleted events (sequence gap)
+- Reordered events (prev_hash chain break)
+- Cross-tenant isolation (tenant_id filter)
 """
 from dataclasses import dataclass, field
+from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,16 +35,26 @@ class VerificationResult:
 async def verify_chain(
     db: AsyncSession,
     *,
+    tenant_id: Optional[UUID] = None,
     from_seq: int | None = None,
     to_seq: int | None = None,
 ) -> VerificationResult:
     """Recompute hashes for every event and verify the chain end-to-end.
 
-    If from_seq is set, we start the walk from that seq and use the
-    predecessor's hash as the expected prev_hash. Otherwise we start
-    from GENESIS.
+    Args:
+        tenant_id: When set, only verify events for this tenant (scoped verification).
+        from_seq:  Start the walk from this seq (inclusive). Defaults to 1.
+        to_seq:    End the walk at this seq (inclusive). Defaults to last event.
+
+    Detects:
+        - Payload modification (hash mismatch)
+        - Hash/signature tampering (HMAC failure)
+        - Deleted events (sequence gap — seq values must be consecutive)
+        - Reordered events (prev_hash chain break)
     """
     stmt = select(AuditLog).order_by(AuditLog.seq.asc())
+    if tenant_id:
+        stmt = stmt.where(AuditLog.tenant_id == tenant_id)
     if from_seq is not None:
         stmt = stmt.where(AuditLog.seq >= from_seq)
     if to_seq is not None:
@@ -59,18 +78,33 @@ async def verify_chain(
 
     errors: list[str] = []
     verified = 0
+    prev_seq: int | None = None
 
     for event in events:
+        # ── Gap detection ─────────────────────────────────────────────────
+        if prev_seq is not None and event.seq != prev_seq + 1:
+            missing = list(range(prev_seq + 1, event.seq))
+            return VerificationResult(
+                total_events=len(events),
+                verified_events=verified,
+                valid=False,
+                broken_at_seq=event.seq,
+                reason=f"sequence gap: missing seq(s) {missing}",
+                errors=errors + [f"Gap detected: seq {prev_seq} → {event.seq}, missing {missing}"],
+            )
+
+        # ── prev_hash chain check (detects reorder) ───────────────────────
         if event.prev_hash != expected_prev:
             return VerificationResult(
                 total_events=len(events),
                 verified_events=verified,
                 valid=False,
                 broken_at_seq=event.seq,
-                reason="prev_hash mismatch",
+                reason="prev_hash mismatch (deleted or reordered event)",
                 errors=errors + [f"seq {event.seq}: prev_hash does not match predecessor"],
             )
 
+        # ── Payload hash recomputation ────────────────────────────────────
         recomputed = compute_event_hash(event.prev_hash, event.payload)
         if recomputed != event.hash:
             return VerificationResult(
@@ -82,6 +116,7 @@ async def verify_chain(
                 errors=errors + [f"seq {event.seq}: recomputed hash does not match stored hash"],
             )
 
+        # ── HMAC signature check ──────────────────────────────────────────
         if not verify_signature(event.hash, event.signature):
             return VerificationResult(
                 total_events=len(events),
@@ -93,6 +128,7 @@ async def verify_chain(
             )
 
         expected_prev = event.hash
+        prev_seq = event.seq
         verified += 1
 
     return VerificationResult(

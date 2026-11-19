@@ -135,14 +135,16 @@ class ShieldClient:
         self,
         approval_id: str,
         approved: bool,
-        decided_by: str = "supervisor",
         note: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Approve or deny a pending human approval."""
+        """Approve or deny a pending human approval.
+
+        Note: ``decided_by`` is no longer accepted; the backend derives it
+        from the authenticated principal (the JWT).
+        """
         url = f"{self.api_url}/api/v1/approvals/{approval_id}/decide"
         body = {
             "approved": approved,
-            "decided_by": decided_by,
             "note": note or ("Approved via AgentShield SDK" if approved else "Denied via AgentShield SDK"),
         }
         try:

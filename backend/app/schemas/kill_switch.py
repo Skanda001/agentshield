@@ -10,7 +10,7 @@ class KillSwitchActivate(BaseModel):
     scope: str = Field(pattern=r"^(agent|tool|tenant|global)$")
     target_id: Optional[str] = Field(default=None, max_length=120)
     reason: str = Field(min_length=3, max_length=1000)
-    activated_by: str = Field(min_length=1, max_length=120)
+    # activated_by is derived from the authenticated principal — not accepted from client
 
     @field_validator("target_id")
     @classmethod
@@ -24,7 +24,7 @@ class KillSwitchActivate(BaseModel):
 
 
 class KillSwitchDeactivate(BaseModel):
-    deactivated_by: str = Field(min_length=1, max_length=120)
+    # deactivated_by is derived from the authenticated principal — not accepted from client
     note: Optional[str] = Field(default=None, max_length=1000)
 
 

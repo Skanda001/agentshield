@@ -17,11 +17,12 @@ async def export_evidence(
     db: AsyncSession,
     *,
     agent_id: Optional[UUID] = None,
+    tenant_id: Optional[UUID] = None,
     limit: int = 500,
 ) -> dict[str, Any]:
-    events = await list_events(db, limit=limit, agent_id=agent_id)
+    events = await list_events(db, limit=limit, agent_id=agent_id, tenant_id=tenant_id)
 
-    verification = await verify_chain(db)
+    verification = await verify_chain(db, tenant_id=tenant_id)
 
     return {
         "manifest": {

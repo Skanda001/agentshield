@@ -29,10 +29,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const suffix = uniqueSuffix();
 
     // 1. Create tenant
-    const tenantRes = await api.post("/tenants", {
-      name: `Demo ${suffix}`,
-      slug: `demo-${suffix}`,
-    });
+    let tenantRes;
+    try {
+      tenantRes = await api.post("/tenants", {
+        name: `Demo ${suffix}`,
+        slug: `demo-${suffix}`,
+      });
+    } catch (err: any) {
+      if (err?.response?.status === 403) {
+        throw new Error(
+          "Demo mode is not enabled on this server. " +
+          "Contact the administrator or use an API key to log in."
+        );
+      }
+      throw err;
+    }
     const tenantId = tenantRes.data.id;
 
     // 2. Create agent
@@ -48,10 +59,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const tokenRes = await api.post("/agents/token", { api_key: apiKey });
     localStorage.setItem("token", tokenRes.data.access_token);
 
-    // 4. Load demo policy (best effort)
+    // 4. Load demo policy (best effort — non-fatal if file not found)
     try {
       await api.post(
-        `/policies/load-yaml?tenant_id=${tenantId}&file_path=policies/demo.yaml`
+        `/policies/load-yaml?file_path=demo.yaml`,
+        null,
+        { headers: { Authorization: `Bearer ${tokenRes.data.access_token}` } }
       );
     } catch (err) {
       console.warn("Demo policy load failed (non-fatal):", err);

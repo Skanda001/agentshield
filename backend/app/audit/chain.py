@@ -8,6 +8,15 @@ Guarantees:
 - A monotonic sequence number gives total order
 - The append is serialized with a Postgres advisory lock so concurrent
   writers cannot fork the chain.
+
+Atomicity contract
+------------------
+``append_event`` does **not** commit the transaction by itself.
+It only flushes (writes the row to the DB within the current
+transaction).  The *caller* is responsible for committing so that the
+decision row and its audit event are committed atomically in one
+transaction.  If the caller rolls back, the audit event is also rolled
+back — no phantom decisions with no audit trail.
 """
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -44,7 +53,12 @@ async def append_event(
     tenant_id: Optional[UUID] = None,
     note: Optional[str] = None,
 ) -> AuditLog:
-    """Append one event to the chain. Serializes concurrent writers."""
+    """Append one event to the chain. Flushes but does NOT commit.
+
+    The caller must commit the surrounding transaction so that the
+    decision row and the audit event are committed atomically.
+    Serializes concurrent writers via a Postgres advisory lock.
+    """
     # Serialize all appends with a transaction-scoped advisory lock.
     await db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": ADVISORY_LOCK_KEY})
 
@@ -75,7 +89,9 @@ async def append_event(
         note=note,
     )
     db.add(event)
-    await db.commit()
+    # Flush: write to DB within current transaction but do NOT commit.
+    # The caller commits once so decision + audit event are atomic.
+    await db.flush()
     await db.refresh(event)
     return event
 
@@ -85,8 +101,11 @@ async def list_events(
     *,
     limit: int = 100,
     agent_id: Optional[UUID] = None,
+    tenant_id: Optional[UUID] = None,
 ) -> list[AuditLog]:
     stmt = select(AuditLog).order_by(AuditLog.seq.desc()).limit(max(1, min(limit, 1000)))
+    if tenant_id:
+        stmt = stmt.where(AuditLog.tenant_id == tenant_id)
     if agent_id:
         stmt = stmt.where(AuditLog.agent_id == agent_id)
     result = await db.execute(stmt)
